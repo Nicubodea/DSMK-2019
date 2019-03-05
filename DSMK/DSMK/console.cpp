@@ -1,19 +1,43 @@
-
 #include <iostream>
-#include "console.h"
+
 #include "trace.h"
 #include "./x64/Debug/console.tmh"
+
+#include <sstream>
+#include <string>
+#include <iterator>
+#include <vector>
+
+#include "console.h"
+
+bool gStop = false;
 
 int main()
 {
     WPP_INIT_TRACING(NULL);
-    std::cout << "hello world";
-    int i = 0;
-    while (i < 100)
+
+    CommandInterpreter interpreter;
+    char buff[101], **argv;
+    int i, len, argc, currentIndex;
+
+    while (!gStop)
     {
-        AppLogTrace("%s", "hello world");
-        Sleep(1000);
-        i++;
+        argc = currentIndex = 0;
+
+        std::cout << ">";
+
+        std::cin.getline(buff, 100);
+
+        std::istringstream buf(buff);
+        std::istream_iterator<std::string> beg(buf), end;
+
+        std::vector<std::string> tokens(beg, end);
+
+        std::cout << "Command line: " << buff << "\n";
+
+        AppLogInfo("Command given: %s", buff);
+
+        interpreter.InterpretCommand(tokens);        
     }
 
     WPP_CLEANUP();
@@ -21,27 +45,39 @@ int main()
 
 
 bool CommandInterpreter::InterpretCommand(
-    int argc,
-    char* argv[]
+    std::vector<std::string> argv
 )
 {
+    int argc = argv.size();
+    AppLogTrace("argc = %d", argc);
+
     for (int i = 0; i < argc; i++)
     {
-        if (!strncmp(argv[i], "help", sizeof("help")))
+        AppLogTrace("argv[%d] = %s", i, argv[i].c_str());
+
+        if (argv[i].compare(0, sizeof("help"), "help") == 0)
         {
-            std::cout << "help was given";
+            std::cout << "The following commands are available: \n";
+
+            std::cout << "help      - prints the help of the console\n";
+
+            std::cout << "exit      - exits the console\n";
 
             return true;
         }
 
-        if (!strncmp(argv[i], "exit", sizeof("exit")))
+        if (argv[i].compare(0, sizeof("exit"), "exit") == 0)
         {
-            std::cout << "exit was given";
+            std::cout << "exit was given\n";
+
+            gStop = 1;
 
             return true;
         }
 
-        std::cout<<"unknown command!";
+        std::cout<<"unknown command!\n";
+
+        AppLogError("Unable to process command: %s", argv[i].c_str());
 
         return false;
     }

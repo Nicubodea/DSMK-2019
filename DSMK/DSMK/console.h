@@ -4,7 +4,6 @@ class __declspec(dllexport) CommandInterpreter
 {
 public:
     bool InterpretCommand(
-        int argc,
-        char* argv[]
+        std::vector<std::string> argv
     );
 };

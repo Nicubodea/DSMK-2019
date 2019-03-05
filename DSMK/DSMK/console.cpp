@@ -17,13 +17,10 @@ int main()
     WPP_INIT_TRACING(NULL);
 
     CommandInterpreter interpreter;
-    char buff[101], **argv;
-    int i, len, argc, currentIndex;
+    char buff[101];
 
     while (!gStop)
     {
-        argc = currentIndex = 0;
-
         std::cout << ">";
 
         std::cin.getline(buff, 100);
@@ -41,6 +38,16 @@ int main()
     }
 
     WPP_CLEANUP();
+}
+
+
+void* DummyWorkFunction(void* DummyParam)
+{
+    int* dummy = (int*)DummyParam;
+
+    *dummy += 1;
+
+    return DummyParam;
 }
 
 
@@ -71,6 +78,45 @@ bool CommandInterpreter::InterpretCommand(
             std::cout << "exit was given\n";
 
             gStop = 1;
+
+            return true;
+        }
+
+        if (argv[i].compare(0, sizeof("start"), "start") == 0)
+        {
+            std::cout << "starting thread pool\n";
+
+            tp->StartThreadPool();
+
+            for (int j = 0; j < 1000; j++)
+            {
+                std::cout << j << "\n";
+                ThreadPool tp2(5);
+                int value = 1;
+                int h;
+
+                tp2.StartThreadPool();
+
+                h = tp2.EnqueueWork((PFUNC_WorkFunction)DummyWorkFunction, &value);
+
+                while (NULL == tp2.GetEnqueuedWork(h));
+
+                tp2.StopThreadPool();
+
+                if (2 != value)
+                {
+                    std::cerr << "ERROR!!!!";
+                }
+            }
+
+            return true;
+        }
+
+        if (argv[i].compare(0, sizeof("stop"), "stop") == 0)
+        {
+            std::cout << "starting thread pool\n";
+
+            tp->StopThreadPool();
 
             return true;
         }

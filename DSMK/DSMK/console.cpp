@@ -41,16 +41,6 @@ int main()
 }
 
 
-void* DummyWorkFunction(void* DummyParam)
-{
-    int* dummy = (int*)DummyParam;
-
-    *dummy += 1;
-
-    return DummyParam;
-}
-
-
 bool CommandInterpreter::InterpretCommand(
     std::vector<std::string> argv
 )
@@ -87,27 +77,6 @@ bool CommandInterpreter::InterpretCommand(
             std::cout << "starting thread pool\n";
 
             tp->StartThreadPool();
-
-            for (int j = 0; j < 1000; j++)
-            {
-                std::cout << j << "\n";
-                ThreadPool tp2(5);
-                int value = 1;
-                int h;
-
-                tp2.StartThreadPool();
-
-                h = tp2.EnqueueWork((PFUNC_WorkFunction)DummyWorkFunction, &value);
-
-                while (NULL == tp2.GetEnqueuedWork(h));
-
-                tp2.StopThreadPool();
-
-                if (2 != value)
-                {
-                    std::cerr << "ERROR!!!!";
-                }
-            }
 
             return true;
         }

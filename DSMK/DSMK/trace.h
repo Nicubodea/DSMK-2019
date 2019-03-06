@@ -1,12 +1,6 @@
 #ifndef _TRACE_H_
 #define _TRACE_H_
-//
-// Copyright (C) 2015 BitDefender S.R.L.
-// Author(s) : Radu PORTASE(rportase@bitdefender.com)
-//
-//
-// WPP Control GUID for MyDriver: bb6301c6-4e62-4bbf-b869-33b533287481
-//
+
 #define WPP_CONTROL_GUIDS \
 WPP_DEFINE_CONTROL_GUID( \
 AppSpecificFlags, (bb6301c6, 4e62, 4bbf, b869, 33b533287481), \

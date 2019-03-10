@@ -56,20 +56,20 @@ private:
             }
 
             waitResult = WaitForSingleObject(obj->QueueEvent, INFINITE);
-            if (waitResult != STATUS_WAIT_0)
+            if (STATUS_WAIT_0 != waitResult)
             {
                 std::cerr << "ERROR: WaitForSingleObject returned: " << std::hex << waitResult << "\n";
                 goto exit_thread_function;
             }
 
             waitResult = WaitForSingleObject(obj->QueueMutex, INFINITE);
-            if (waitResult != STATUS_WAIT_0)
+            if (STATUS_WAIT_0 != waitResult)
             {
                 std::cerr << "ERROR: WaitForSingleObject returned: " << waitResult << "\n";
                 goto exit_thread_function;
             }
 
-            if (obj->WorkQueue.size() == 0)
+            if (0 == obj->WorkQueue.size())
             {
                 if (!ResetEvent(obj->QueueEvent))
                 {
@@ -152,7 +152,7 @@ public:
                 0,
                 NULL);
 
-            if (this->Threads[i] == NULL)
+            if (NULL == this->Threads[i])
             {
                 std::cerr << "ERROR: CreateThread failed: " << GetLastError() << "\n";
             }
@@ -172,7 +172,7 @@ public:
         }
 
         waitResult = WaitForSingleObject(QueueMutex, INFINITE);
-        if (waitResult != STATUS_WAIT_0)
+        if (STATUS_WAIT_0 != waitResult)
         {
             std::cerr << "ERROR: WaitForSingleObject returned: " << waitResult << "\n";
             goto exit_enqueue;
@@ -215,7 +215,7 @@ public:
     {
         DWORD waitResult;
 
-        if (this->ThreadPoolState == 0)
+        if (0 == this->ThreadPoolState)
         {
             std::cerr << "ERROR: Thread pool already started!";
             return;
@@ -227,13 +227,13 @@ public:
 
         for (int i = 0; i < this->NumberOfThreads; i++)
         {
-            if (this->Threads[i] == NULL)
+            if (NULL == this->Threads[i])
             {
                 continue;
             }
 
             waitResult = WaitForSingleObject(Threads[i], INFINITE);
-            if (waitResult != STATUS_WAIT_0)
+            if (STATUS_WAIT_0 != waitResult)
             {
                 std::cerr << "ERROR: WaitForSingleObject returned: " << waitResult << "\n";
             }

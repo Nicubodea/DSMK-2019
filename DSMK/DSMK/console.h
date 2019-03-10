@@ -12,6 +12,11 @@ public:
         tp = new ThreadPool(5);
     }
 
+    ~CommandInterpreter()
+    {
+        delete tp;
+    }
+
     bool InterpretCommand(
         std::vector<std::string> argv
     );

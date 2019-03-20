@@ -12,6 +12,7 @@
 #include <winternl.h>
 
 #include "console.h"
+#include "../DSMKDriver0/sioctl.h"
 
 
 bool gStop = false;
@@ -249,6 +250,161 @@ exit_function:
     return;
 }
 
+#define METHOD_IN_DIRECT        1
+#define FILE_ANY_ACCESS         0
+
+#define CTL_CODE( DeviceType, Function, Method, Access ) (                 \
+    ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
+)
+
+
+bool SendIoCtlToDrv0(
+    std::string IoCtl
+)
+{
+    HANDLE hDevice;
+    BOOL bRc;
+    ULONG bytesReturned;
+    DWORD errNum = 0;
+    TCHAR driverLocation[MAX_PATH];
+    CHAR inputBuffer[100];
+    CHAR outputBuffer[100];
+    DWORD ioctlTs;
+
+    int ioctl = std::atoi(IoCtl.c_str());
+
+    if (ioctl == 0 || ioctl != 1 || ioctl != 2)
+    {
+        return false;
+    }
+
+    if (ioctl == 0)
+    {      
+        ioctlTs = MY_IOCTL_CODE_FIRST;
+    }
+    else
+    {
+        ioctlTs = MY_IOCTL_CODE_SECOND;
+    }
+
+
+    if ((hDevice = CreateFileA("\\\\.\\Drv0File",
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL)) == INVALID_HANDLE_VALUE) {
+
+        errNum = GetLastError();
+        AppLogError("CreateFile failed : %d\n", errNum);
+
+        return false;
+    }
+   
+    ZeroMemory(inputBuffer, sizeof(inputBuffer));
+    strcpy_s(inputBuffer, "abcd");
+    ZeroMemory(outputBuffer, sizeof(outputBuffer));
+
+    bRc = DeviceIoControl(hDevice,
+        (DWORD)ioctl,
+        &inputBuffer,
+        (DWORD)strlen(inputBuffer) + 1,
+        &outputBuffer,
+        sizeof(outputBuffer),
+        &bytesReturned,
+        NULL
+    );
+
+    if (!bRc)
+    {
+        AppLogError("Error in DeviceIoControl : %d", GetLastError());
+        return false;
+
+    }
+    AppLogInfo("    OutBuffer (%d): %s\n", bytesReturned, outputBuffer);
+
+   
+    CloseHandle(hDevice);
+
+    return true;
+
+}
+
+
+bool SendIoCtlToDrv1(
+    std::string IoCtl
+)
+{
+    HANDLE hDevice;
+    BOOL bRc;
+    ULONG bytesReturned;
+    DWORD errNum = 0;
+    TCHAR driverLocation[MAX_PATH];
+    CHAR inputBuffer[100];
+    CHAR outputBuffer[100];
+    DWORD ioctlTs;
+
+    int ioctl = std::atoi(IoCtl.c_str());
+
+    if (ioctl == 0 || ioctl != 1 || ioctl != 2)
+    {
+        return false;
+    }
+
+    if (ioctl == 0)
+    {
+        ioctlTs = MY_IOCTL_CODE_FIRST;
+    }
+    else
+    {
+        ioctlTs = MY_IOCTL_CODE_SECOND;
+    }
+
+
+    if ((hDevice = CreateFileA("\\\\.\\Drv1File",
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL)) == INVALID_HANDLE_VALUE) {
+
+        errNum = GetLastError();
+        AppLogError("CreateFile failed : %d\n", errNum);
+
+        return false;
+    }
+
+    ZeroMemory(inputBuffer, sizeof(inputBuffer));
+    strcpy_s(inputBuffer, "abcd");
+    ZeroMemory(outputBuffer, sizeof(outputBuffer));
+
+    bRc = DeviceIoControl(hDevice,
+        (DWORD)ioctl,
+        &inputBuffer,
+        (DWORD)strlen(inputBuffer) + 1,
+        &outputBuffer,
+        sizeof(outputBuffer),
+        &bytesReturned,
+        NULL
+    );
+
+    if (!bRc)
+    {
+        AppLogError("Error in DeviceIoControl : %d", GetLastError());
+        return false;
+
+    }
+    AppLogInfo("    OutBuffer (%d): %s\n", bytesReturned, outputBuffer);
+
+
+    CloseHandle(hDevice);
+
+    return true;
+
+}
+
 
 bool CommandInterpreter::InterpretCommand(
     _In_ std::vector<std::string> argv
@@ -308,6 +464,28 @@ bool CommandInterpreter::InterpretCommand(
             PrintAllProcesses();
             
             return true;
+        }
+
+        if (argv[i].compare(0, sizeof("sendioctl"), "sendioctl") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cout << "sendioctl <ioctl>\n";
+                return false;
+            }
+
+            return SendIoCtlToDrv0(argv[i + 1]);
+        }
+
+        if (argv[i].compare(0, sizeof("sendioctl1"), "sendioctl1") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cout << "sendioctl1 <ioctl>\n";
+                return false;
+            }
+
+            return SendIoCtlToDrv1(argv[i + 1]);
         }
 
         std::cout<<"unknown command!\n";

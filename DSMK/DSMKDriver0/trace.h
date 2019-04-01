@@ -3,7 +3,7 @@
 
 #define WPP_CONTROL_GUIDS \
 WPP_DEFINE_CONTROL_GUID( \
-AppSpecificFlags, (bb6301c6, 4e62, 4bbf, b869, 33b533287481), \
+AppSpecificFlags, (bb6301c6, 4e62, 4bbf, b869, 33b533287482), \
 WPP_DEFINE_BIT(ComponentDriver0)                            \
 )
 //

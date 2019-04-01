@@ -1,7 +1,49 @@
 #include "threadpool.h"
 #include "trace.h"
 
-#include "./x64/Debug/drivermain.tmh"
+#include "./x64/Debug/threadpool.tmh"
+
+
+#define ACQUIRE_LOCK(ThreadPool, OldIrql) \
+ switch (ThreadPool->TypeOfSynchronization)\
+ {\
+        case kthreadPoolSyncTypeSpinLock:\
+        {\
+            KeAcquireSpinLock(&ThreadPool->QueueSpinLock, &OldIrql);\
+            break;\
+        }\
+        case kthreadPoolSyncTypeEresource:\
+        {\
+            ExEnterCriticalRegionAndAcquireResourceExclusive(&ThreadPool->QueueResource);\
+            break;\
+        }\
+        case kthreadPoolSyncTypePushLock:\
+        {\
+            ExAcquirePushLockExclusive(&ThreadPool->QueuePushLock);\
+            break;\
+        }\
+ }\
+
+
+#define RELEASE_LOCK(ThreadPool, OldIrql) \
+switch (ThreadPool->TypeOfSynchronization)\
+{\
+        case kthreadPoolSyncTypeSpinLock:\
+        {\
+            KeReleaseSpinLock(&ThreadPool->QueueSpinLock, OldIrql);\
+            break;\
+        }\
+        case kthreadPoolSyncTypeEresource:\
+        {\
+            ExReleaseResourceAndLeaveCriticalRegion(&ThreadPool->QueueResource);\
+            break;\
+        }\
+        case kthreadPoolSyncTypePushLock:\
+        {\
+            ExReleasePushLockExclusive(&ThreadPool->QueuePushLock);\
+            break;\
+        }\
+}\
 
 
 //
@@ -12,8 +54,52 @@ _KThrpDefaultThreadExecRoutine(
     _In_ KTHREAD_POOL* ThreadPool
     )
 {
+    UNREFERENCED_PARAMETER(ThreadPool);
+    NTSTATUS status;
+    KIRQL oldIrql = KeGetCurrentIrql();
 
+    while (TRUE)
+    {
+        if (ThreadPool->ThreadPoolState == kthreadPoolStopped)
+        {
+            goto _exit_from_func;
+        }
 
+        status = KeWaitForSingleObject(&ThreadPool->QueueSignalEvent,
+            Executive,
+            KernelMode,
+            FALSE,
+            NULL);
+        if (status != STATUS_SUCCESS)
+        {
+            Drv0LogWarning("[WARNING] KeWaitForSingleObject returned: 0x%08x\n", status);
+        }
+
+        ACQUIRE_LOCK(ThreadPool, oldIrql);
+
+        if (IsListEmpty(&ThreadPool->WorkQueue))
+        {
+            KeResetEvent(&ThreadPool->QueueSignalEvent);
+            KeSetEvent(&ThreadPool->QueueEmptyEvent, 0, FALSE);
+            RELEASE_LOCK(ThreadPool, oldIrql);
+
+            continue;
+        }
+
+        KTHREAD_POOL_WORK_ITEM* workItem = CONTAINING_RECORD(ThreadPool->WorkQueue.Flink, KTHREAD_POOL_WORK_ITEM, Link);
+
+        RemoveEntryList(&workItem->Link);
+
+        RELEASE_LOCK(ThreadPool, oldIrql);
+
+        VOID* result = workItem->Function(workItem->Param);
+        workItem->CompletionCallback(result);
+
+        ExFreePoolWithTag(workItem, TAG_THRPOOL_KWORK);
+    }
+
+_exit_from_func:
+    return;
 }
 
 
@@ -24,10 +110,11 @@ NTSTATUS
 KThrpInitializeThreadPool(
     _In_ DWORD NumberOfThreads,
     _In_ KTHREAD_POOL_SYNC_TYPE SyncType,
-    _Inout_ KTHREAD_POOL* ThreadPool
+    _Inout_ KTHREAD_POOL** ThreadPool
     )
 {
-    NTSTATUS status;
+    NTSTATUS status = STATUS_SUCCESS;
+    KTHREAD_POOL *pThreadPool = NULL;
 
     if (0 == NumberOfThreads)
     {
@@ -39,65 +126,69 @@ KThrpInitializeThreadPool(
         return STATUS_INVALID_PARAMETER_3;
     }
 
-    if (kthreadPoolUnknown != ThreadPool->ThreadPoolState)
+    pThreadPool = ExAllocatePoolWithTag(NonPagedPool, sizeof(KTHREAD_POOL), TAG_THRPOOL_KPOOL);
+    if (NULL == pThreadPool)
     {
-        return STATUS_INVALID_PARAMETER_2;
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     switch (SyncType)
     {
         case kthreadPoolSyncTypeSpinLock:
         {
-            KeInitializeSpinLock(&ThreadPool->QueueSpinLock);
+            KeInitializeSpinLock(&pThreadPool->QueueSpinLock);
             break;
         }
         case kthreadPoolSyncTypeEresource:
         {
-            status = ExInitializeResourceLite(&ThreadPool->QueueResource);
+            status = ExInitializeResourceLite(&pThreadPool->QueueResource);
             if (!NT_SUCCESS(status))
             {
                 Drv0LogError("[ERROR] ExInitializeResourceLite: 0x%08x", status);
-                return status;
+                goto cleanup_and_exit;
             }
             break;
         }
         case kthreadPoolSyncTypePushLock:
         {
-            ExInitializePushLock(&ThreadPool->QueuePushLock);
+            ExInitializePushLock(&pThreadPool->QueuePushLock);
             break;
         }
         default:
         {
             Drv0LogError("[ERROR] Unknown sync type: %d", SyncType);
-            return STATUS_INVALID_PARAMETER_2;
+            status = STATUS_INVALID_PARAMETER_2;
+            goto cleanup_and_exit;
         }
     }
 
-    ThreadPool->NumberOfThreads = NumberOfThreads;
-    ThreadPool->TypeOfSynchronization = SyncType;
+    pThreadPool->NumberOfThreads = NumberOfThreads;
+    pThreadPool->TypeOfSynchronization = SyncType;
 
-    KeInitializeEvent(&ThreadPool->QueueSignalEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&pThreadPool->QueueSignalEvent, NotificationEvent, FALSE);
 
-    ThreadPool->Threads = ExAllocatePoolWithTag(NonPagedPool, NumberOfThreads * sizeof(HANDLE), TAG_THRPOOL_KTHR);
-    if (NULL == ThreadPool->Threads)
+    KeInitializeEvent(&pThreadPool->QueueEmptyEvent, NotificationEvent, TRUE);
+
+    pThreadPool->Threads = ExAllocatePoolWithTag(NonPagedPool, NumberOfThreads * sizeof(HANDLE), TAG_THRPOOL_KTHR);
+    if (NULL == pThreadPool->Threads)
     {
         Drv0LogError("[ERROR] ExAllocatePoolWithTag returned NULL");
-        return STATUS_INSUFFICIENT_RESOURCES;
+        goto cleanup_and_exit;
     }
 
-    InitializeListHead(&ThreadPool->WorkQueue);
+    InitializeListHead(&pThreadPool->WorkQueue);
 
-    ThreadPool->ThreadPoolState = kthreadPoolStarted;
+    pThreadPool->ThreadPoolState = kthreadPoolStarted;
 
     for (DWORD i = 0; i < NumberOfThreads; i++)
     {
-        status = PsCreateSystemThread(&ThreadPool->Threads[i],
+        status = PsCreateSystemThread(&pThreadPool->Threads[i],
             0,
             NULL,
             0,
             0,
             _KThrpDefaultThreadExecRoutine,
-            ThreadPool);
+            pThreadPool);
 
         if (!NT_SUCCESS(status))
         {
@@ -109,18 +200,18 @@ KThrpInitializeThreadPool(
 cleanup_and_exit:
     if (!NT_SUCCESS(status))
     {
-        ThreadPool->ThreadPoolState = kthreadPoolStopped;
+        pThreadPool->ThreadPoolState = kthreadPoolStopped;
 
-        if (NULL != ThreadPool->Threads)
+        if (NULL != pThreadPool->Threads)
         {
-            KeSetEvent(&ThreadPool->QueueSignalEvent, 0, TRUE);
+            KeSetEvent(&pThreadPool->QueueSignalEvent, 0, TRUE);
 
             for (DWORD i = 0; i < NumberOfThreads; i++)
             {
-                if (NULL != ThreadPool->Threads[i])
+                if (NULL != pThreadPool->Threads[i])
                 {
                     VOID* object;
-                    status = ObReferenceObjectByHandle(ThreadPool->Threads[i],
+                    status = ObReferenceObjectByHandle(pThreadPool->Threads[i],
                         SYNCHRONIZE | EVENT_MODIFY_STATE,
                         *PsThreadType,
                         KernelMode,
@@ -139,30 +230,34 @@ cleanup_and_exit:
                         status = STATUS_SUCCESS;
                     }
 
-                    ZwClose(ThreadPool->Threads[i]);
+                    ZwClose(pThreadPool->Threads[i]);
                 }
-                
             }
 
-            ExFreePoolWithTag(ThreadPool->Threads, TAG_THRPOOL_KTHR);
+            ExFreePoolWithTag(pThreadPool->Threads, TAG_THRPOOL_KTHR);
         }
+
+        ExFreePoolWithTag(pThreadPool, TAG_THRPOOL_KPOOL);
+
+        pThreadPool = NULL;
     }
+
+    *ThreadPool = pThreadPool;
 
     return status;
 }
 
 
 //
-// KThrpEnqueueWorkInThreadPool
+// _KThrpEnqueueWorkInThreadPool
 //
-NTSTATUS
-KThrpEnqueueWorkInThreadPool(
+static NTSTATUS
+_KThrpEnqueueWorkInThreadPool(
     _In_ KTHREAD_POOL* ThreadPool,
     _In_ KTHREAD_POOL_WORK_ITEM* WorkItem
     )
 {
-    NTSTATUS status;
-    KIRQL oldIrql;
+    KIRQL oldIrql = KeGetCurrentIrql();
 
     if (NULL == ThreadPool)
     {
@@ -179,44 +274,52 @@ KThrpEnqueueWorkInThreadPool(
         return STATUS_INVALID_PARAMETER_2;
     }
 
-    switch (ThreadPool->TypeOfSynchronization)
-    {
-        case kthreadPoolSyncTypeSpinLock:
-        {
-            KeAcquireSpinLock(&ThreadPool->QueueSpinLock, &oldIrql);
-            break;
-        }
-        case kthreadPoolSyncTypeEresource:
-        {
-            ExEnterCriticalRegionAndAcquireResourceExclusive(&ThreadPool->QueueResource);
-            break;
-        }
-        case kthreadPoolSyncTypePushLock:
-        {
-            ExAcquirePushLockExclusive(&ThreadPool->QueuePushLock);
-            break;
-        }
-    }
+    ACQUIRE_LOCK(ThreadPool, oldIrql);
+
+    InsertTailList(&ThreadPool->WorkQueue, &WorkItem->Link);
+
+    RELEASE_LOCK(ThreadPool, oldIrql);
+
+    KeSetEvent(&ThreadPool->QueueSignalEvent, 0, FALSE);
+
+    KeResetEvent(&ThreadPool->QueueEmptyEvent);
+
+    return STATUS_SUCCESS;
+}
 
 
-    switch (ThreadPool->TypeOfSynchronization)
+//
+// KThrpCreateAndEnqueueWorkItem
+//
+NTSTATUS
+KThrpCreateAndEnqueueWorkItem(
+    _In_ KTHREAD_POOL* ThreadPool,
+    _In_ PFUNC_WorkFunction Function,
+    _In_ PFUNC_CompletionCallback CompletionCallback,
+    _In_ VOID* Param
+    )
+{
+    KTHREAD_POOL_WORK_ITEM* workItem = NULL;
+    NTSTATUS status;
+
+    workItem = ExAllocatePoolWithTag(NonPagedPool, sizeof(KTHREAD_POOL_WORK_ITEM), TAG_THRPOOL_KWORK);
+    if (NULL == workItem)
     {
-        case kthreadPoolSyncTypeSpinLock:
-        {
-            KeReleaseSpinLock(&ThreadPool->QueueSpinLock, oldIrql);
-            break;
-        }
-        case kthreadPoolSyncTypeEresource:
-        {
-            ExReleaseResourceAndLeaveCriticalRegion(&ThreadPool->QueueResource);
-            break;
-        }
-        case kthreadPoolSyncTypePushLock:
-        {
-            ExReleasePushLockExclusive(&ThreadPool->QueuePushLock);
-            break;
-        }
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
+
+    workItem->Function = Function;
+    workItem->CompletionCallback = CompletionCallback;
+    workItem->Param = Param;
+
+    status = _KThrpEnqueueWorkInThreadPool(ThreadPool, workItem);
+    if (!NT_SUCCESS(status))
+    {
+        Drv0LogError("[ERROR] _KThrpEnqueueWorkInThreadPool failed: 0x%08x", status);
+        ExFreePoolWithTag(workItem, TAG_THRPOOL_KWORK);
+    }
+
+    return status;
 }
 
 
@@ -272,9 +375,32 @@ KThrpWaitAndStopThreadPool(
 
                 ZwClose(ThreadPool->Threads[i]);
             }
-
         }
 
         ExFreePoolWithTag(ThreadPool->Threads, TAG_THRPOOL_KTHR);
+    }
+
+    ExFreePoolWithTag(ThreadPool, TAG_THRPOOL_KPOOL);
+
+    return STATUS_SUCCESS;
+}
+
+
+//
+// KThrpWaitForWorkItemsToFinish
+//
+VOID
+KThrpWaitForWorkItemsToFinish(
+    _In_ KTHREAD_POOL* ThreadPool
+    )
+{
+    while (TRUE)
+    {
+        if (IsListEmpty(&ThreadPool->WorkQueue))
+        {
+            break;
+        }
+
+        KeWaitForSingleObject(&ThreadPool->QueueEmptyEvent, Executive, KernelMode, FALSE, NULL);
     }
 }

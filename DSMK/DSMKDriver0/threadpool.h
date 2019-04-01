@@ -5,6 +5,8 @@
 #include <minwindef.h>
 
 #define TAG_THRPOOL_KTHR        'RHTK'
+#define TAG_THRPOOL_KPOOL       'LOPK'
+#define TAG_THRPOOL_KWORK       'ROWK'
 
 typedef enum _KTHREAD_POOL_STATE
 {
@@ -35,6 +37,7 @@ typedef struct _KTHREAD_POOL
     EX_PUSH_LOCK QueuePushLock;
 
     KEVENT QueueSignalEvent;
+    KEVENT QueueEmptyEvent;
 
 } KTHREAD_POOL, *PKTHREAD_POOL;
 
@@ -54,18 +57,25 @@ NTSTATUS
 KThrpInitializeThreadPool(
     _In_ DWORD NumberOfThreads,
     _In_ KTHREAD_POOL_SYNC_TYPE SyncType,
-    _Inout_ KTHREAD_POOL* ThreadPool
-);
+    _Inout_ KTHREAD_POOL** ThreadPool
+    );
 
 NTSTATUS
-KThrpEnqueueWorkInThreadPool(
+KThrpCreateAndEnqueueWorkItem(
     _In_ KTHREAD_POOL* ThreadPool,
-    _In_ KTHREAD_POOL_WORK_ITEM* WorkItem
-);
+    _In_ PFUNC_WorkFunction Function,
+    _In_ PFUNC_CompletionCallback CompletionCallback,
+    _In_ VOID* Param
+    );
 
 NTSTATUS
 KThrpWaitAndStopThreadPool(
     _In_ KTHREAD_POOL* ThreadPool
-);
+    );
+
+VOID
+KThrpWaitForWorkItemsToFinish(
+    _In_ KTHREAD_POOL* ThreadPool 
+    );
 
 #endif

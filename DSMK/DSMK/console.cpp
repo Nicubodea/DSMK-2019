@@ -75,7 +75,10 @@ no_command_line:
 
         AppLogInfo("Command given: %s", buff);
 
-        interpreter.InterpretCommand(tokens);        
+        if (false == interpreter.InterpretCommand(tokens))
+        {
+            AppLogError("returned false for command...");
+        }
     }
 
     WPP_CLEANUP();
@@ -273,18 +276,24 @@ bool SendIoCtlToDrv0(
 
     int ioctl = std::atoi(IoCtl.c_str());
 
-    if (ioctl == 0 || ioctl != 1 || ioctl != 2)
-    {
-        return false;
-    }
+    AppLogInfo("ioctl is %d", ioctl);
 
-    if (ioctl == 0)
+    //if (ioctl == 0 || ioctl != 1 || ioctl != 2 || ioctl != 3)
+    //{
+    //    return false;
+    //}
+
+    if (ioctl == 1)
     {      
         ioctlTs = MY_IOCTL_CODE_FIRST;
     }
-    else
+    else if(ioctl == 2)
     {
         ioctlTs = MY_IOCTL_CODE_SECOND;
+    }
+    else if (ioctl == 3)
+    {
+        ioctlTs = MY_IOCTL_CODE_TEST_KTHREAD_POOL;
     }
 
 
@@ -292,7 +301,7 @@ bool SendIoCtlToDrv0(
         GENERIC_READ | GENERIC_WRITE,
         0,
         NULL,
-        CREATE_ALWAYS,
+        OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,
         NULL)) == INVALID_HANDLE_VALUE) {
 
@@ -307,7 +316,7 @@ bool SendIoCtlToDrv0(
     ZeroMemory(outputBuffer, sizeof(outputBuffer));
 
     bRc = DeviceIoControl(hDevice,
-        (DWORD)ioctl,
+        (DWORD)ioctlTs,
         &inputBuffer,
         (DWORD)strlen(inputBuffer) + 1,
         &outputBuffer,
@@ -352,11 +361,11 @@ bool SendIoCtlToDrv1(
         return false;
     }
 
-    if (ioctl == 0)
+    if (ioctl == 1)
     {
         ioctlTs = MY_IOCTL_CODE_FIRST;
     }
-    else
+    else if(ioctl == 2)
     {
         ioctlTs = MY_IOCTL_CODE_SECOND;
     }
@@ -475,6 +484,11 @@ bool CommandInterpreter::InterpretCommand(
             }
 
             return SendIoCtlToDrv0(argv[i + 1]);
+        }
+
+        if (argv[i].compare(0, sizeof("testpool"), "testpool") == 0)
+        {
+            return SendIoCtlToDrv0("3");
         }
 
         if (argv[i].compare(0, sizeof("sendioctl1"), "sendioctl1") == 0)

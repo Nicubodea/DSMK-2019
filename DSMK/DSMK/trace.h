@@ -25,11 +25,6 @@ WPP_DEFINE_BIT(ComponentDriver0)                            \
 // FUNC AppLogError{LEVEL=TRACE_LEVEL_ERROR, FLAGS=ComponentConsole}(MSG, ...);
 // FUNC AppLogCritical{LEVEL=TRACE_LEVEL_CRITICAL, FLAGS=ComponentConsole}(MSG, ...);
 //
-// FUNC Drv0LogTrace{LEVEL=TRACE_LEVEL_VERBOSE, FLAGS=ComponentDriver0}(MSG, ...);
-// FUNC Drv0LogInfo{LEVEL=TRACE_LEVEL_INFORMATION, FLAGS=ComponentDriver0}(MSG, ...);
-// FUNC Drv0LogWarning{LEVEL=TRACE_LEVEL_WARNING, FLAGS=ComponentDriver0}(MSG, ...);
-// FUNC Drv0LogError{LEVEL=TRACE_LEVEL_ERROR, FLAGS=ComponentDriver0}(MSG, ...);
-// FUNC Drv0LogCritical{LEVEL=TRACE_LEVEL_CRITICAL, FLAGS=ComponentDriver0}(MSG, ...);
 //
 // end_wpp
 //

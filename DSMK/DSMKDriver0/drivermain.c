@@ -4,6 +4,9 @@
 #include "sioctl.h"
 
 #include "trace.h"
+
+#include "threadpool.h"
+
 #include "./x64/Debug/drivermain.tmh"
 
 #define NT_DEVICE_NAME      L"\\Device\\Drv0"
@@ -33,9 +36,9 @@ DriverEntry(
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    Drv0LogInfo("DriverEntry called");
-
     WPP_INIT_TRACING(DriverObject, RegistryPath);
+
+    Drv0LogInfo("DriverEntry called");
         
     RtlInitUnicodeString(&ntUnicodeString, NT_DEVICE_NAME);
 
@@ -130,6 +133,134 @@ Drv0UnloadDriver(
 }
 
 
+KMUTEX gMutex;
+
+
+static VOID
+_Drv0DefaultCompletionCallback(
+    VOID* Param
+)
+{
+    UNREFERENCED_PARAMETER(Param);
+}
+
+
+static VOID*
+_Drv0DefaultWorkCallback(
+    VOID* Param
+)
+{
+    int* pInt = (int*)Param;
+
+    KeWaitForSingleObject(&gMutex, Executive, KernelMode, FALSE, NULL);
+
+    *pInt += 1;
+
+    KeReleaseMutex(&gMutex, FALSE);
+
+    return NULL;
+}
+
+
+
+NTSTATUS
+Drv0TestThreadPool(
+    VOID
+)
+{
+    KTHREAD_POOL *threadPool;
+    NTSTATUS status;
+    int a = 0;
+
+    KeInitializeMutex(&gMutex, 0);
+
+    status = KThrpInitializeThreadPool(10, kthreadPoolSyncTypeSpinLock, &threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    for (int i = 0; i < 100; i++)
+    {
+        status = KThrpCreateAndEnqueueWorkItem(threadPool, _Drv0DefaultWorkCallback, _Drv0DefaultCompletionCallback, &a);
+        if (!NT_SUCCESS(status))
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+
+    KThrpWaitForWorkItemsToFinish(threadPool);
+
+    status = KThrpWaitAndStopThreadPool(threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (a != 100)
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    status = KThrpInitializeThreadPool(10, kthreadPoolSyncTypeEresource, &threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    for (int i = 0; i < 100; i++)
+    {
+        status = KThrpCreateAndEnqueueWorkItem(threadPool, _Drv0DefaultWorkCallback, _Drv0DefaultCompletionCallback, &a);
+        if (!NT_SUCCESS(status))
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+
+    KThrpWaitForWorkItemsToFinish(threadPool);
+
+    status = KThrpWaitAndStopThreadPool(threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (a != 200)
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    status = KThrpInitializeThreadPool(10, kthreadPoolSyncTypePushLock, &threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    for (int i = 0; i < 100; i++)
+    {
+        status = KThrpCreateAndEnqueueWorkItem(threadPool, _Drv0DefaultWorkCallback, _Drv0DefaultCompletionCallback, &a);
+        if (!NT_SUCCESS(status))
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+
+    KThrpWaitForWorkItemsToFinish(threadPool);
+
+    status = KThrpWaitAndStopThreadPool(threadPool);
+    if (!NT_SUCCESS(status))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (a != 300)
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 
 NTSTATUS
 Drv0DeviceControl(
@@ -143,8 +274,6 @@ Drv0DeviceControl(
     ULONG               outBufLength;
 
     UNREFERENCED_PARAMETER(DeviceObject);
-
-
 
     PAGED_CODE();
 
@@ -161,18 +290,29 @@ Drv0DeviceControl(
         goto end;
     }
 
-
-
     switch (irpSp->Parameters.DeviceIoControl.IoControlCode)
     {
-    case MY_IOCTL_CODE_FIRST:
-    {
-        Drv0LogInfo("First IOCTL was called!");
-    }
-    case MY_IOCTL_CODE_SECOND:
-    {
-        Drv0LogInfo("Second IOCTL was called!");
-    }
+        case MY_IOCTL_CODE_FIRST:
+        {
+            Drv0LogInfo("First IOCTL was called!");
+            break;
+        }
+        case MY_IOCTL_CODE_SECOND:
+        {
+            Drv0LogInfo("Second IOCTL was called!");
+            break;
+        }
+        case MY_IOCTL_CODE_TEST_KTHREAD_POOL:
+        {
+            status = Drv0TestThreadPool();
+            if (!NT_SUCCESS(status))
+            {
+                Drv0LogError("Thread pool test failed!");
+                goto end;
+            }
+            Drv0LogInfo("Thread pool test passed!");
+            break;
+        }
     }
 
 end:

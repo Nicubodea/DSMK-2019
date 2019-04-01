@@ -23,6 +23,16 @@ DRIVER_DISPATCH Drv0DeviceControl;
 
 DRIVER_UNLOAD Drv0UnloadDriver;
 
+__forceinline int __min(
+    int a, int b
+)
+{
+    if (a < b) return a;
+    return b;
+}
+
+#define MIN(a, b) __min((a), (b))
+
 NTSTATUS
 DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
@@ -268,10 +278,12 @@ Drv0DeviceControl(
     PIRP Irp
 )
 {
-    PIO_STACK_LOCATION  irpSp;
-    NTSTATUS            status = STATUS_SUCCESS;
-    ULONG               inBufLength;
-    ULONG               outBufLength;
+    PIO_STACK_LOCATION irpSp;
+    NTSTATUS status = STATUS_SUCCESS;
+    ULONG inBufLength;
+    ULONG outBufLength;
+    char *inbuf, *outbuf;
+    DWORD dataLen;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -281,7 +293,7 @@ Drv0DeviceControl(
     inBufLength = irpSp->Parameters.DeviceIoControl.InputBufferLength;
     outBufLength = irpSp->Parameters.DeviceIoControl.OutputBufferLength;
 
-    Drv0LogInfo("Drv0DeviceControl called with %d", irpSp->Parameters.DeviceIoControl.IoControlCode);
+    Drv0LogInfo("Drv0DeviceControl called with %x %d %d\n", irpSp->Parameters.DeviceIoControl.IoControlCode, inBufLength, outBufLength);
 
     if (!inBufLength || !outBufLength)
     {
@@ -289,6 +301,9 @@ Drv0DeviceControl(
         Drv0LogError("0 sized buffers given!");
         goto end;
     }
+
+    inbuf = Irp->AssociatedIrp.SystemBuffer;
+    outbuf = Irp->AssociatedIrp.SystemBuffer;
 
     switch (irpSp->Parameters.DeviceIoControl.IoControlCode)
     {
@@ -315,8 +330,14 @@ Drv0DeviceControl(
         }
     }
 
-end:
 
+    
+    dataLen = sizeof("Salut");
+
+    RtlCopyBytes(outbuf, "Salut", MIN(dataLen, outBufLength));
+
+    Irp->IoStatus.Information = MIN(dataLen, outBufLength);
+end:
     Irp->IoStatus.Status = status;
 
     IoCompleteRequest(Irp, IO_NO_INCREMENT);

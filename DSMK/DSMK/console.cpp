@@ -253,6 +253,7 @@ exit_function:
     return;
 }
 
+#define METHOD_BUFFERED         0
 #define METHOD_IN_DIRECT        1
 #define FILE_ANY_ACCESS         0
 

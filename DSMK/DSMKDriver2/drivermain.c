@@ -31,9 +31,9 @@ DriverEntry(
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    Drv2LogInfo("DriverEntry called");
-
     WPP_INIT_TRACING(DriverObject, RegistryPath);
+
+    Drv2LogInfo("DriverEntry called");
 
     RtlInitUnicodeString(&ntUnicodeString, NT_DEVICE_NAME);
 

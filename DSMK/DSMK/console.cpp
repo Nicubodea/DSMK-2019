@@ -356,7 +356,7 @@ bool SendIoCtlToDrv1(
 
     int ioctl = std::atoi(IoCtl.c_str());
 
-    if (ioctl == 0 || ioctl != 1 || ioctl != 2)
+    if (ioctl == 0 || (ioctl != 1 && ioctl != 2))
     {
         return false;
     }
@@ -390,7 +390,7 @@ bool SendIoCtlToDrv1(
     ZeroMemory(outputBuffer, sizeof(outputBuffer));
 
     bRc = DeviceIoControl(hDevice,
-        (DWORD)ioctl,
+        (DWORD)ioctlTs,
         &inputBuffer,
         (DWORD)strlen(inputBuffer) + 1,
         &outputBuffer,

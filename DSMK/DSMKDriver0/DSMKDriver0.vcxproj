@@ -137,7 +137,11 @@
     <ClCompile>
       <WppEnabled>true</WppEnabled>
       <WppScanConfigurationData>$(ProjectDir)\trace.h</WppScanConfigurationData>
+      <PreprocessorDefinitions>_WIN64;_AMD64_;AMD64;KERNEL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <Link>
+      <AdditionalOptions>/INTEGRITYCHECK %(AdditionalOptions)</AdditionalOptions>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <Inf Include="DSMKDriver0.inf" />
@@ -147,9 +151,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="drivermain.c" />
+    <ClCompile Include="notifications.c" />
+    <ClCompile Include="protproc.c" />
     <ClCompile Include="threadpool.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="notifications.h" />
+    <ClInclude Include="protproc.h" />
     <ClInclude Include="sioctl.h" />
     <ClInclude Include="threadpool.h" />
     <ClInclude Include="trace.h" />

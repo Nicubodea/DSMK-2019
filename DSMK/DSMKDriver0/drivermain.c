@@ -7,6 +7,10 @@
 
 #include "threadpool.h"
 
+#include "protproc.h"
+
+#include "notifications.h"
+
 #include "./x64/Debug/drivermain.tmh"
 
 #define NT_DEVICE_NAME      L"\\Device\\Drv0"
@@ -33,20 +37,28 @@ __forceinline int __min(
 
 #define MIN(a, b) __min((a), (b))
 
+
 NTSTATUS
 DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PUNICODE_STRING RegistryPath
 )
 {
-    NTSTATUS        status;
-    UNICODE_STRING  ntUnicodeString;    
-    UNICODE_STRING  ntWin32NameString;   
-    PDEVICE_OBJECT  deviceObject = NULL; 
+    NTSTATUS status;
+    UNICODE_STRING ntUnicodeString;    
+    UNICODE_STRING ntWin32NameString;   
+    PDEVICE_OBJECT deviceObject = NULL;
+    BOOLEAN bShouldWppCleanup = FALSE;
+    BOOLEAN bShouldDeleteDevice = FALSE;
+    BOOLEAN bShouldDeleteSymlink = FALSE;
+    BOOLEAN bShouldDeleteNotifications = FALSE;
+    BOOLEAN bShouldUninitProcess = FALSE;
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
     WPP_INIT_TRACING(DriverObject, RegistryPath);
+
+    bShouldWppCleanup = TRUE;
 
     Drv0LogInfo("DriverEntry called");
         
@@ -67,6 +79,8 @@ DriverEntry(
         goto cleanup_and_exit;
     }
 
+    bShouldDeleteDevice = TRUE;
+
     DriverObject->MajorFunction[IRP_MJ_CREATE] = Drv0CreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = Drv0CreateClose;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = Drv0DeviceControl;
@@ -80,13 +94,56 @@ DriverEntry(
     if (!NT_SUCCESS(status))
     {
         Drv0LogError("Couldn't create symbolic link\n");
-        IoDeleteDevice(deviceObject);
+        goto cleanup_and_exit;
     }
+
+    bShouldDeleteSymlink = TRUE;
+
+    status = Drv0InitializeNotifications(DriverObject);
+    if (!NT_SUCCESS(status))
+    {
+        Drv0LogError("[ERROR] Drv0InitializeNotifications failed: 0x%08x\n", status);
+        goto cleanup_and_exit;
+    }
+
+    bShouldDeleteNotifications = TRUE;
+
+    status = Drv0InitializeProcessProtection();
+    if (!NT_SUCCESS(status))
+    {
+        Drv0LogError("[ERROR] Drv0InitializeProcessProtection failed: 0x%08x\n", status);
+        goto cleanup_and_exit;
+    }
+
+    bShouldUninitProcess = TRUE;
 
 cleanup_and_exit:
     if (!NT_SUCCESS(status))
     {
-        WPP_CLEANUP(DriverObject);
+        if (bShouldUninitProcess)
+        {
+            Drv0UnitializeProcessProtection();
+        }
+
+        if (bShouldDeleteNotifications)
+        {
+            Drv0UninitializeNotifications();
+        }
+
+        if (bShouldDeleteSymlink)
+        {
+            IoDeleteSymbolicLink(&ntWin32NameString);
+        }
+
+        if (bShouldDeleteDevice)
+        {
+            IoDeleteDevice(deviceObject);
+        }
+
+        if (bShouldWppCleanup)
+        {
+            WPP_CLEANUP(DriverObject);
+        }
     }
 
     return status;
@@ -138,6 +195,10 @@ Drv0UnloadDriver(
     {
         IoDeleteDevice(deviceObject);
     }
+
+    Drv0UninitializeNotifications();
+
+    Drv0UnitializeProcessProtection();
 
     WPP_CLEANUP(DriverObject);
 }
@@ -284,6 +345,7 @@ Drv0DeviceControl(
     ULONG outBufLength;
     char *inbuf, *outbuf;
     DWORD dataLen;
+    IOCTL_GET_SET_STRUCT* ioStruct;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -299,11 +361,15 @@ Drv0DeviceControl(
     {
         status = STATUS_INVALID_PARAMETER;
         Drv0LogError("0 sized buffers given!");
+        Irp->IoStatus.Status = status;
+
         goto end;
     }
 
     inbuf = Irp->AssociatedIrp.SystemBuffer;
     outbuf = Irp->AssociatedIrp.SystemBuffer;
+
+    ioStruct = (IOCTL_GET_SET_STRUCT*)inbuf;
 
     switch (irpSp->Parameters.DeviceIoControl.IoControlCode)
     {
@@ -328,18 +394,48 @@ Drv0DeviceControl(
             Drv0LogInfo("Thread pool test passed!");
             break;
         }
+        case MY_IOCTL_CODE_PROTECT_PROCESS:
+        {
+            status = Drv0ProtectProcess((IOCTL_PROT_UNPROT_PROC_STRUCT*)ioStruct->Buffer);
+            if (!NT_SUCCESS(status))
+            {
+                Drv0LogError("[ERROR] Drv0ProtectProcess failed: 0x%08x\n", status);
+            }
+            break;
+        }
+
+        case MY_IOCTL_CODE_UNPROTECT_PROCESS:
+        {
+            status = Drv0UnprotectProcess((IOCTL_PROT_UNPROT_PROC_STRUCT*)ioStruct->Buffer);
+            if (!NT_SUCCESS(status))
+            {
+                Drv0LogError("[ERROR] Drv0UnprotectProcess failed: 0x%08x\n", status);
+            }
+            break;
+        }
+        default:
+        {
+            Drv0LogError("[ERROR] Unrecognized ioctl: %x\n", irpSp->Parameters.DeviceIoControl.IoControlCode);
+            status = STATUS_NOT_FOUND;
+            break;
+        }
     }
 
+    ioStruct->Status = status;
 
+    dataLen = sizeof(IOCTL_GET_SET_STRUCT) + ioStruct->BufferSize;
     
-    dataLen = sizeof("Salut");
+    if (dataLen > outBufLength)
+    {
+        ioStruct->Status = STATUS_BUFFER_TOO_SMALL;
+    }
 
-    RtlCopyBytes(outbuf, "Salut", MIN(dataLen, outBufLength));
+    //RtlCopyBytes(outbuf, ioStruct, MIN(dataLen, outBufLength));
 
     Irp->IoStatus.Information = MIN(dataLen, outBufLength);
+    Irp->IoStatus.Status = ioStruct->Status;
 end:
-    Irp->IoStatus.Status = status;
-
+    
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;

@@ -30,6 +30,12 @@
     <ClCompile Include="threadpool.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="protproc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="notifications.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="trace.h">
@@ -39,6 +45,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="threadpool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protproc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="notifications.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

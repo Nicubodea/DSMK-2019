@@ -261,6 +261,58 @@ exit_function:
     ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
 )
 
+static void
+_SendIoCtl(
+    HANDLE Device,
+    DWORD Ioctl,
+    BYTE* Buffer,
+    DWORD BufferSize,
+    BYTE* OutData,
+    DWORD OutDataSize
+)
+{
+    DWORD maxSize = max(BufferSize, OutDataSize);
+    IOCTL_GET_SET_STRUCT *pIoctl = (IOCTL_GET_SET_STRUCT*)malloc(sizeof(IOCTL_GET_SET_STRUCT) + maxSize);
+    DWORD totalSize = sizeof(IOCTL_GET_SET_STRUCT) + maxSize;
+    BOOL bRc;
+    DWORD bytesRet;
+
+    pIoctl->BufferSize = BufferSize;
+    
+    if (Buffer != NULL)
+    {
+        memcpy(pIoctl->Buffer, Buffer, BufferSize);
+    }
+
+    bRc = DeviceIoControl(
+        Device,
+        Ioctl,
+        pIoctl,
+        totalSize,
+        pIoctl,
+        totalSize,
+        &bytesRet,
+        NULL
+    );
+
+    if (!bRc)
+    {
+        AppLogError("IOCTL %x failed!", Ioctl);
+        return;
+    }
+
+    if (pIoctl->Status != 0)
+    {
+        AppLogError("IOCTL %x returned %x!", Ioctl, pIoctl->Status);
+        return;
+    }
+
+    if (NULL != OutData)
+    {
+        memcpy(OutData, pIoctl->Buffer, OutDataSize);
+    }
+}
+
 
 bool SendIoCtlToDrv0(
     std::string IoCtl
@@ -271,8 +323,7 @@ bool SendIoCtlToDrv0(
     ULONG bytesReturned;
     DWORD errNum = 0;
     TCHAR driverLocation[MAX_PATH];
-    CHAR inputBuffer[100];
-    CHAR outputBuffer[100];
+    
     DWORD ioctlTs;
 
     int ioctl = std::atoi(IoCtl.c_str());
@@ -297,6 +348,41 @@ bool SendIoCtlToDrv0(
         ioctlTs = MY_IOCTL_CODE_TEST_KTHREAD_POOL;
     }
 
+    if ((hDevice = CreateFileA("\\\\.\\Drv0File",
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL)) == INVALID_HANDLE_VALUE) {
+
+        errNum = GetLastError();
+        AppLogError("CreateFile failed : %d\n", errNum);
+
+        return false;
+    }
+
+    _SendIoCtl(hDevice, ioctlTs, NULL, 0, NULL, 0);
+
+    CloseHandle(hDevice);
+
+    return true;
+
+}
+
+
+bool SendProtectIoctl(
+    DWORD Pid
+)
+{
+    HANDLE hDevice;
+    DWORD ioctlTs;
+    DWORD errNum;
+    IOCTL_PROT_UNPROT_PROC_STRUCT infoStruct;
+
+    ioctlTs = MY_IOCTL_CODE_PROTECT_PROCESS;
+
+    infoStruct.Pid = Pid;
 
     if ((hDevice = CreateFileA("\\\\.\\Drv0File",
         GENERIC_READ | GENERIC_WRITE,
@@ -311,31 +397,79 @@ bool SendIoCtlToDrv0(
 
         return false;
     }
-   
-    ZeroMemory(inputBuffer, sizeof(inputBuffer));
-    strcpy_s(inputBuffer, "abcd");
-    ZeroMemory(outputBuffer, sizeof(outputBuffer));
 
-    bRc = DeviceIoControl(hDevice,
-        (DWORD)ioctlTs,
-        &inputBuffer,
-        (DWORD)strlen(inputBuffer) + 1,
-        &outputBuffer,
-        sizeof(outputBuffer),
-        &bytesReturned,
+    _SendIoCtl(hDevice, ioctlTs, (BYTE*)&infoStruct, sizeof(IOCTL_PROT_UNPROT_PROC_STRUCT), NULL, 0);
+
+    CloseHandle(hDevice);
+
+    return true;
+}
+
+
+bool SendUnprotectIoctl(
+    DWORD Pid
+)
+{
+    HANDLE hDevice;
+    DWORD ioctlTs;
+    DWORD errNum;
+    IOCTL_PROT_UNPROT_PROC_STRUCT infoStruct;
+
+    ioctlTs = MY_IOCTL_CODE_UNPROTECT_PROCESS;
+
+    infoStruct.Pid = Pid;
+
+    if ((hDevice = CreateFileA("\\\\.\\Drv0File",
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL)) == INVALID_HANDLE_VALUE) {
+
+        errNum = GetLastError();
+        AppLogError("CreateFile failed : %d\n", errNum);
+
+        return false;
+    }
+
+    _SendIoCtl(hDevice, ioctlTs, (BYTE*)&infoStruct, sizeof(IOCTL_PROT_UNPROT_PROC_STRUCT), NULL, 0);
+
+    CloseHandle(hDevice);
+
+    return true;
+}
+
+bool MakeRemoteThread(
+    DWORD Pid
+)
+{
+    HANDLE hnd, tHnd;
+
+    hnd = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION |
+        PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, Pid);
+
+    if (hnd == INVALID_HANDLE_VALUE)
+    {
+        AppLogError("OpenProcess failed: 0x%08x\n", GetLastError());
+        return false;
+    }
+
+    tHnd = CreateRemoteThread(
+        hnd,
+        NULL,
+        0,
+        0,
+        NULL,
+        0,
         NULL
     );
 
-    if (!bRc)
+    if (NULL == tHnd)
     {
-        AppLogError("Error in DeviceIoControl : %d", GetLastError());
+        AppLogError("CreateRemoteThread failed: 0x%08x\n", GetLastError());
         return false;
-
     }
-    AppLogInfo("    OutBuffer (%d): %s\n", bytesReturned, outputBuffer);
-
-   
-    CloseHandle(hDevice);
 
     return true;
 
@@ -370,7 +504,6 @@ bool SendIoCtlToDrv1(
     {
         ioctlTs = MY_IOCTL_CODE_SECOND;
     }
-
 
     if ((hDevice = CreateFileA("\\\\.\\Drv1File",
         GENERIC_READ | GENERIC_WRITE,
@@ -487,6 +620,28 @@ bool CommandInterpreter::InterpretCommand(
             return SendIoCtlToDrv0(argv[i + 1]);
         }
 
+        if (argv[i].compare(0, sizeof("protect"), "protect") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cout << "protect <pid>\n";
+                return false;
+            }
+
+            return SendProtectIoctl(std::atoi(argv[i + 1].c_str()));
+        }
+
+        if(argv[i].compare(0, sizeof("unprotect"), "unprotect") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cout << "unprotect <pid>\n";
+                return false;
+            }
+
+            return SendUnprotectIoctl(std::atoi(argv[i + 1].c_str()));
+        }
+
         if (argv[i].compare(0, sizeof("testpool"), "testpool") == 0)
         {
             return SendIoCtlToDrv0("3");
@@ -501,6 +656,17 @@ bool CommandInterpreter::InterpretCommand(
             }
 
             return SendIoCtlToDrv1(argv[i + 1]);
+        }
+
+        if (argv[i].compare(0, sizeof("remote"), "remote") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cout << "remote <pid>\n";
+                return false;
+            }
+
+            return MakeRemoteThread(std::atoi(argv[i + 1].c_str()));
         }
 
         std::cout<<"unknown command!\n";

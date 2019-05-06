@@ -9,6 +9,7 @@
 #include "communication.tmh"
 #include "CommShared.h"
 #include "MyDriver.h"
+#include "Options.h"
 
 #pragma region FLT_PORT Commands
 /*++
@@ -31,6 +32,26 @@ Note: Hccp stands for Handler for Core Command Private, keep this in mind when n
 /// before entering the handlers.This may not be enough for commands with variable buffer sizes.Make sure all
 /// commands check the parameters correctly.
 /// Probing is also done for the parameters.
+
+
+#define OPT_FLAG_MONTIOR_CREATE_PROCESS                 0x00000001
+#define OPT_FLAG_MONTIOR_TERMINATE_PROCESS              0x00000002
+#define OPT_FLAG_MONTIOR_THREAD_CREATE                  0x00000004
+#define OPT_FLAG_MONITOR_THREAD_TERMINATE               0x00000008
+#define OPT_FLAG_MONITOR_MODULE_LOAD                    0x00000010
+#define OPT_FLAG_MONITOR_REGISTRY_CREATE                0x00000020
+#define OPT_FLAG_MONITOR_REGISTRY_SET_VALUE             0x00000040
+#define OPT_FLAG_MONITOR_REGISTRY_DELETE_KEY            0x00000080
+#define OPT_FLAG_MONITOR_REGISTRY_DELETE_VALUE          0x00000100
+#define OPT_FLAG_MONITOR_REGISTRY_LOAD_KEY              0x00000200
+#define OPT_FLAG_MONITOR_REGISTRY_RENAME_KEY            0x00000400
+#define OPT_FLAG_MONITOR_FILE_CREATE                    0x00000800
+#define OPT_FLAG_MONITOR_FILE_CLOSE                     0x00001000
+#define OPT_FLAG_MONITOR_FILE_CLEANUP                   0x00002000
+#define OPT_FLAG_MONITOR_FILE_READ                      0x00004000
+#define OPT_FLAG_MONITOR_FILE_WRITE                     0x00008000
+#define OPT_FLAG_MONITOR_FILE_SET_ATTRIBUTES            0x00010000
+
 
 //
 // HccpNotImplementedOrInvalidCommandCode
@@ -103,14 +124,18 @@ HccpStartMonitoring(
     _Out_ PULONG BytesWritten
 )
 {
+    COMM_CMD_START_MONITORING *pCmd = InputBuffer;
+
     UNREFERENCED_PARAMETER(InputBuffer);
     UNREFERENCED_PARAMETER(InputBufferLength);
     UNREFERENCED_PARAMETER(OutputBuffer);
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(BytesWritten);
 
+    MyFltUpdateOptions(gDrv.Options | pCmd->StartMonitorMask);
+    
     *BytesWritten = 0;
-    gDrv.MonitoringStarted = 1;
+    
     return STATUS_SUCCESS;
 }
 
@@ -126,14 +151,17 @@ HccpStopMonitoring(
     _Out_ PULONG BytesWritten
 )
 {
+    COMM_CMD_STOP_MONITORING *pCmd = InputBuffer;
+
     UNREFERENCED_PARAMETER(InputBuffer);
     UNREFERENCED_PARAMETER(InputBufferLength);
     UNREFERENCED_PARAMETER(OutputBuffer);
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(BytesWritten);
 
+    MyFltUpdateOptions(gDrv.Options & (~pCmd->StopMonitorMask));
+
     *BytesWritten = 0;
-    gDrv.MonitoringStarted = 0;
     return STATUS_SUCCESS;
 }
 

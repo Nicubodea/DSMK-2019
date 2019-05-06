@@ -35,6 +35,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Options.c" />
     <ClCompile Include="ProcessFilter.c" />
     <ResourceCompile Include="MyFilter.rc" />
     <ClCompile Include="communication.c" />
@@ -193,6 +194,7 @@
       <PreprocessorDefinitions>KERNEL_MODE;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)\shared;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4200;4748;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <WppMinimalRebuildFromTracking>false</WppMinimalRebuildFromTracking>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -267,6 +269,7 @@
     <ClInclude Include="..\shared\CommShared.h" />
     <ClInclude Include="Communication.h" />
     <ClInclude Include="MyDriver.h" />
+    <ClInclude Include="Options.h" />
     <ClInclude Include="ProcessFilter.h" />
     <ClInclude Include="Trace.h" />
   </ItemGroup>

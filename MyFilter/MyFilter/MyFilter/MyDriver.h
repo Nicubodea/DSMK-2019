@@ -9,8 +9,9 @@
 typedef struct _GLOBLA_DATA
 {
     PFLT_FILTER FilterHandle;
+    DRIVER_OBJECT *DrvObj;
     APP_COMMUNICATION Communication;
-    ULONG MonitoringStarted;
+    ULONG Options;
 }GLOBLA_DATA, *PGLOBLA_DATA;
 
 extern GLOBLA_DATA gDrv;

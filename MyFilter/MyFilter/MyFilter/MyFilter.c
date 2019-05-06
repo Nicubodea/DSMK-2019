@@ -409,6 +409,10 @@ DriverEntry (
 
     UNREFERENCED_PARAMETER( RegistryPath );
 
+    WPP_INIT_TRACING(DriverObject, RegistryPath);
+
+    gDrv.DrvObj = DriverObject;
+
     LogInfo("MyFilter!DriverEntry: Entered\n");
 
     //
@@ -469,6 +473,8 @@ MyFilterUnload (
     CommUninitializeFilterCommunicationPort();
     ProcFltUninitialize();
     FltUnregisterFilter( gDrv.FilterHandle );
+
+    WPP_CLEANUP(gDrv.DrvObj);
 
     return STATUS_SUCCESS;
 }

@@ -70,6 +70,7 @@ CmdGetDriverVersion(
 
 NTSTATUS
 CmdStartMonitoring(
+    DWORD MonitorMask
     )
 {
     NTSTATUS status = STATUS_UNSUCCESSFUL;
@@ -84,6 +85,8 @@ CmdStartMonitoring(
         //
         RtlZeroMemory(&cmd, sizeof(cmd));
         cmd.Header.CommandCode = commStartMonitoring;
+
+        cmd.StartMonitorMask = MonitorMask;
 
         //
         // Send the command to KM
@@ -117,6 +120,7 @@ CmdStartMonitoring(
 
 NTSTATUS
 CmdStopMonitoring(
+    DWORD StopMask
     )
 {
     NTSTATUS status = STATUS_UNSUCCESSFUL;
@@ -131,7 +135,7 @@ CmdStopMonitoring(
         //
         RtlZeroMemory(&cmd, sizeof(cmd));
         cmd.Header.CommandCode = commStopMonitoring;
-
+        cmd.StopMonitorMask = StopMask;
         //
         // Send the command to KM
         //

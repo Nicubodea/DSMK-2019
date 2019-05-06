@@ -19,6 +19,7 @@ CmdGetDriverVersion(
 
 NTSTATUS
 CmdStartMonitoring(
+    DWORD MonitorMask
     );
 
 //
@@ -27,6 +28,7 @@ CmdStartMonitoring(
 
 NTSTATUS
 CmdStopMonitoring(
+    DWORD StopMask
     );
 
 #endif//_COMMANDS_H_

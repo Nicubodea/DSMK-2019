@@ -6,7 +6,7 @@
 #include "MyFilter.tmh"
 #include "MyDriver.h"
 #include "Communication.h"
-#include "ProcessFilter.h"
+#include "Options.h"
 
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
 /*************************************************************************
@@ -437,14 +437,6 @@ DriverEntry (
             return status;
         }
 
-        status = ProcFltInitialize();
-        if (!NT_SUCCESS(status))
-        {
-            CommUninitializeFilterCommunicationPort();
-            FltUnregisterFilter(gDrv.FilterHandle);
-            return status;
-        }
-
         //
         //  Start filtering i/o
         //
@@ -452,7 +444,6 @@ DriverEntry (
         if (!NT_SUCCESS( status ))
         {
             CommUninitializeFilterCommunicationPort();
-            ProcFltUninitialize();
             FltUnregisterFilter( gDrv.FilterHandle );
         }
     }
@@ -470,8 +461,8 @@ MyFilterUnload (
     PAGED_CODE();
 
     LogInfo("MyFilter!MyFilterUnload: Entered\n");
+    MyFltUpdateOptions(0);
     CommUninitializeFilterCommunicationPort();
-    ProcFltUninitialize();
     FltUnregisterFilter( gDrv.FilterHandle );
 
     WPP_CLEANUP(gDrv.DrvObj);

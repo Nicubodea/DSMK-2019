@@ -6,6 +6,7 @@
 #include "CommShared.h"
 #include "Trace.h"
 #include "ProcessFilter.tmh"
+#include "Options.h"
 
 void
 ProcFltSendMessageProcessCreate(
@@ -15,6 +16,11 @@ ProcFltSendMessageProcessCreate(
 {
     PMY_DRIVER_MSG_PROCESS_NOTIFICATION pMsg = NULL;
     MY_DRIVER_PROCESS_CREATE_MESSAGE_REPLY reply = {0};
+
+    if (!(gDrv.Options & OPT_FLAG_MONITOR_CREATE_PROCESS))
+    {
+        return;
+    }
 
     ULONG msgSize = sizeof(MY_DRIVER_MSG_PROCESS_NOTIFICATION);
     if (CreateInfo->ImageFileName)
@@ -56,6 +62,12 @@ ProcFltSendMessageProcessTerminate(
 )
 {
     MY_DRIVER_PROCESS_TERMINATE_MSG msg;
+
+    if (!(gDrv.Options & OPT_FLAG_MONITOR_TERMINATE_PROCESS))
+    {
+        return;
+    }
+
     msg.Header.MessageCode = msgProcessTerminate;
 
     msg.ProcessId = HandleToULong(ProcessId);
@@ -90,11 +102,13 @@ ProcFltNotifyRoutine(
 NTSTATUS
 ProcFltInitialize()
 {
+    LogInfo("Initializing Process Filtering!");
     return PsSetCreateProcessNotifyRoutineEx(ProcFltNotifyRoutine, FALSE);
 }
 
 NTSTATUS
 ProcFltUninitialize()
 {
+    LogInfo("Uninitializing Process Filtering!");
     return PsSetCreateProcessNotifyRoutineEx(ProcFltNotifyRoutine, TRUE);
 }

@@ -98,7 +98,7 @@ MyFilterPreOperationNoPostOperation (
 
 CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 
-#if 0 // TODO - List all of the requests to filter.
+    /*
     { IRP_MJ_CREATE,
       0,
       MyFilterPreOperation,
@@ -293,8 +293,7 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
       0,
       MyFilterPreOperation,
       MyFilterPostOperation },
-
-#endif // TODO
+      */
 
     { IRP_MJ_OPERATION_END }
 };
@@ -481,11 +480,34 @@ MyFilterPreOperation (
     _Flt_CompletionContext_Outptr_ PVOID *CompletionContext
     )
 {
+
+    PFLT_FILE_NAME_INFORMATION fltInfo;
+    NTSTATUS status;
+
     UNREFERENCED_PARAMETER( Data );
     UNREFERENCED_PARAMETER( FltObjects );
     UNREFERENCED_PARAMETER( CompletionContext );
 
+    LogInfo("IrpFlags: %d", Data->Iopb->IrpFlags);
+
+
     LogInfo("MyFilter!MyFilterPreOperation: Entered\n");
+
+    status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED, &fltInfo);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("[ERROR] FltGetFileNameInformation: 0x%08x", status);
+        goto cleanup_and_exit;
+    }
+
+    if (!!(Data->Iopb->IrpFlags & IRP_CREATE_OPERATION))
+    {
+        LogInfo("IRP_CREATE_OPERATION");
+    }
+    LogInfo("File Name: %S", fltInfo->Name.Buffer);
+
+cleanup_and_exit:
+
     return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 }
 

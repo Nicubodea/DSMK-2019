@@ -75,6 +75,7 @@ _Drv0RegExCallbackFunction(
     if (notifyClass == RegNtRenameKey)
     {
         REG_RENAME_KEY_INFORMATION *pInfo = (REG_RENAME_KEY_INFORMATION*)Argument2;
+        
         UNICODE_STRING *objName;
 
         status = CmCallbackGetKeyObjectID(

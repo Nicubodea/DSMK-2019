@@ -7,6 +7,7 @@
 #include "MyDriver.h"
 
 #include "ProcessFilter.h"
+#include "RegisterFilter.h"
 
 #define ACTIVATED(Option, Options) (!!((Options) & (Option)))
 #define NOT_ACTIVATED(Option, Options) (!((Options) & (Option)))
@@ -31,6 +32,12 @@ MyFltUpdateOptions(
         {
             LogError("ProcFltInitialize: %08x", status);
         }
+
+        status = RegFltInitialize(gDrv.DrvObj);
+        if (!NT_SUCCESS(status))
+        {
+            LogError("RegFltInitialize: 0x%08x", status);
+        }
     }
 
     if (ACTIVATED(OPT_FLAG_MONITOR_CREATE_PROCESS | OPT_FLAG_MONITOR_TERMINATE_PROCESS, gDrv.Options) &&
@@ -42,7 +49,15 @@ MyFltUpdateOptions(
         {
             LogError("ProcFltUninitialize: %08x", status);
         }
+
+        status = RegFltUninitialize();
+        if (!NT_SUCCESS(status))
+        {
+            LogError("RegFltUninitialize: %08x", status);
+        }
     }
+
+    
 
     gDrv.Options = NewOptions;
 }

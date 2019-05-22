@@ -47,7 +47,7 @@ MsgHandleProcessCreate(
     _Out_ PDWORD BytesWritten
 )
 {
-    PMY_DRIVER_PROCESS_NOTIFICATION_FULL_MESSAGE pInput = (PMY_DRIVER_PROCESS_NOTIFICATION_FULL_MESSAGE)InputBuffer;
+    PMY_DRIVER_PROCESS_NOTIFICATION_MESSAGE pInput = (PMY_DRIVER_PROCESS_NOTIFICATION_FULL_MESSAGE)InputBuffer;
     PMY_DRIVER_PROCESS_CREATE_FULL_MESSAGE_REPLY  pOutput = (PMY_DRIVER_PROCESS_CREATE_FULL_MESSAGE_REPLY)OutputBuffer;
 
     *BytesWritten = 0;
@@ -152,6 +152,9 @@ MsgDispatchNewMessage(
         break;
     case msgProcessTerminate:
         status = MsgHandleProcessTerminate(InputBuffer, InputBufferSize, OutputBuffer, OutputBufferSize, BytesWritten);
+        break;
+    case msgFileOp:
+        status = MsgHandleFileOperation(InputBuffer, InputBufferSize, OutputBuffer, OutputBufferSize, BytesWritten);
         break;
     default:
         status =  MsgHandleUnknownMessage(InputBuffer, InputBufferSize, OutputBuffer, OutputBufferSize, BytesWritten);

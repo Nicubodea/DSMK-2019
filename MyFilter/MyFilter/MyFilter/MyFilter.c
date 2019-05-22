@@ -7,6 +7,7 @@
 #include "MyDriver.h"
 #include "Communication.h"
 #include "Options.h"
+#include "CommShared.h"
 
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
 /*************************************************************************
@@ -98,13 +99,7 @@ MyFilterPreOperationNoPostOperation (
 
 CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 
-    /*
     { IRP_MJ_CREATE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_CREATE_NAMED_PIPE,
       0,
       MyFilterPreOperation,
       MyFilterPostOperation },
@@ -124,67 +119,7 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
       MyFilterPreOperation,
       MyFilterPostOperation },
 
-    { IRP_MJ_QUERY_INFORMATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
     { IRP_MJ_SET_INFORMATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_QUERY_EA,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_SET_EA,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_FLUSH_BUFFERS,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_QUERY_VOLUME_INFORMATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_SET_VOLUME_INFORMATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_DIRECTORY_CONTROL,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_FILE_SYSTEM_CONTROL,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_DEVICE_CONTROL,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_INTERNAL_DEVICE_CONTROL,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_SHUTDOWN,
-      0,
-      MyFilterPreOperationNoPostOperation,
-      NULL },                               //post operations not supported
-
-    { IRP_MJ_LOCK_CONTROL,
       0,
       MyFilterPreOperation,
       MyFilterPostOperation },
@@ -193,107 +128,6 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
       0,
       MyFilterPreOperation,
       MyFilterPostOperation },
-
-    { IRP_MJ_CREATE_MAILSLOT,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_QUERY_SECURITY,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_SET_SECURITY,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_QUERY_QUOTA,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_SET_QUOTA,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_PNP,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_ACQUIRE_FOR_SECTION_SYNCHRONIZATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_RELEASE_FOR_SECTION_SYNCHRONIZATION,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_ACQUIRE_FOR_MOD_WRITE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_RELEASE_FOR_MOD_WRITE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_ACQUIRE_FOR_CC_FLUSH,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_RELEASE_FOR_CC_FLUSH,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_FAST_IO_CHECK_IF_POSSIBLE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_NETWORK_QUERY_OPEN,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_MDL_READ,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_MDL_READ_COMPLETE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_PREPARE_MDL_WRITE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_MDL_WRITE_COMPLETE,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_VOLUME_MOUNT,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-
-    { IRP_MJ_VOLUME_DISMOUNT,
-      0,
-      MyFilterPreOperation,
-      MyFilterPostOperation },
-      */
 
     { IRP_MJ_OPERATION_END }
 };
@@ -470,6 +304,66 @@ MyFilterUnload (
 }
 
 
+VOID
+MyFilterSendFileMessage(
+    UNICODE_STRING* FileName,
+    MY_DRIVER_MSG_FILE_TYPE Type
+)
+{
+    MY_DRIVER_MSG_FILE_NOTIFICATION *pMsg = NULL;
+    MY_DRIVER_MESSAGE_REPLY reply = { 0 };
+    LARGE_INTEGER time;
+
+    if (!(gDrv.Options & OPT_FLAG_MONITOR_FILE))
+    {
+        return;
+    }
+
+    ULONG msgSize = sizeof(MY_DRIVER_MSG_FILE_NOTIFICATION);
+    if (FileName)
+    {
+        msgSize += FileName->Length;
+    }
+
+    pMsg = ExAllocatePoolWithTag(PagedPool, msgSize, 'GSM+');
+    if (!pMsg)
+    {
+        return;
+    }
+
+    RtlZeroMemory(pMsg, sizeof(*pMsg));
+
+    pMsg->Header.MessageCode = msgFileOp;
+
+    KeQuerySystemTimePrecise(&time);
+    
+    pMsg->Header.TimeStamp = time.QuadPart;
+
+    pMsg->Header.Result = STATUS_SUCCESS;
+
+    pMsg->Type = Type;
+
+    if (FileName)
+    {
+        pMsg->NameLen = FileName->Length;
+        RtlCopyMemory(&pMsg->Data[0], FileName->Buffer, FileName->Length);
+    }
+    else
+    {
+        pMsg->NameLen = 0;
+    }
+
+    ULONG replySize = sizeof(reply);
+    NTSTATUS status = CommSendMessage(pMsg, msgSize, &reply, &replySize);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("CommSendMessage failed with status = 0x%X", status);
+    }
+
+    ExFreePoolWithTag(pMsg, 'GSM+');
+}
+
+
 /*************************************************************************
     MiniFilter callback routines.
 *************************************************************************/
@@ -488,23 +382,37 @@ MyFilterPreOperation (
     UNREFERENCED_PARAMETER( FltObjects );
     UNREFERENCED_PARAMETER( CompletionContext );
 
-    LogInfo("IrpFlags: %d", Data->Iopb->IrpFlags);
-
-
-    LogInfo("MyFilter!MyFilterPreOperation: Entered\n");
-
-    status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED, &fltInfo);
+    status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_FILESYSTEM_ONLY, &fltInfo);
     if (!NT_SUCCESS(status))
     {
         LogError("[ERROR] FltGetFileNameInformation: 0x%08x", status);
         goto cleanup_and_exit;
     }
 
-    if (!!(Data->Iopb->IrpFlags & IRP_CREATE_OPERATION))
+    if (Data->Iopb->MajorFunction == IRP_MJ_CREATE)
     {
-        LogInfo("IRP_CREATE_OPERATION");
+        MyFilterSendFileMessage(&fltInfo->Name, fileCreate);
     }
-    LogInfo("File Name: %S", fltInfo->Name.Buffer);
+    else if (Data->Iopb->MajorFunction == IRP_MJ_CLOSE)
+    {
+        MyFilterSendFileMessage(&fltInfo->Name, fileClose);
+    }
+    else if (Data->Iopb->MajorFunction == IRP_MJ_CLEANUP)
+    {
+        MyFilterSendFileMessage(&fltInfo->Name, fileCleanup);
+    }
+    else if (Data->Iopb->MajorFunction == IRP_MJ_READ)
+    {
+        MyFilterSendFileMessage(&fltInfo->Name, fileRead);
+    }
+    else if (Data->Iopb->MajorFunction == IRP_MJ_WRITE)
+    {
+        MyFilterSendFileMessage(&fltInfo->Name, fileWrite);
+    }
+    else if (Data->Iopb->MajorFunction == IRP_MJ_SET_INFORMATION)
+    {
+        MyFilterSendFileMessage(&fltInfo->Name, fileSetAttributes);
+    }
 
 cleanup_and_exit:
 

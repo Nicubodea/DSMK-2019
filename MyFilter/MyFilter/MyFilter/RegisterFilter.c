@@ -16,6 +16,7 @@ RegExCallbackFunction(
     NTSTATUS status;
 
     UNREFERENCED_PARAMETER(CallbackContext);
+
     if (notifyClass == RegNtPostCreateKeyEx)
     {
         REG_POST_OPERATION_INFORMATION *pInfo = (REG_POST_OPERATION_INFORMATION *)Argument2;

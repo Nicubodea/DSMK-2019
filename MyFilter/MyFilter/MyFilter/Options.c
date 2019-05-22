@@ -7,6 +7,8 @@
 #include "MyDriver.h"
 
 #include "ProcessFilter.h"
+#include "ThreadFIlter.h"
+#include "ModuleFilter.h"
 #include "RegisterFilter.h"
 
 #define ACTIVATED(Option, Options) (!!((Options) & (Option)))
@@ -33,6 +35,18 @@ MyFltUpdateOptions(
             LogError("ProcFltInitialize: %08x", status);
         }
 
+        status = ThrFltInitialize(gDrv.DrvObj);
+        if (!NT_SUCCESS(status))
+        {
+            LogError("ThrFltInitialize: 0x%08x", status);
+        }
+
+        status = ModFltInitialize(gDrv.DrvObj);
+        if (!NT_SUCCESS(status))
+        {
+            LogError("ModFltInitialize: 0x%08x", status);
+        }
+
         status = RegFltInitialize(gDrv.DrvObj);
         if (!NT_SUCCESS(status))
         {
@@ -48,6 +62,18 @@ MyFltUpdateOptions(
         if (!NT_SUCCESS(status))
         {
             LogError("ProcFltUninitialize: %08x", status);
+        }
+
+        status = ThrFltUninitialize();
+        if (!NT_SUCCESS(status))
+        {
+            LogError("ThrFltUninitialize: 0x%08x", status);
+        }
+
+        status = ModFltUninitialize();
+        if (!NT_SUCCESS(status))
+        {
+            LogError("ModFltUninitialize: 0x%08x", status);
         }
 
         status = RegFltUninitialize();

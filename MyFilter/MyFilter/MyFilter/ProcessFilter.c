@@ -15,7 +15,7 @@ ProcFltSendMessageProcessCreate(
 )
 {
     PMY_DRIVER_MSG_PROCESS_NOTIFICATION pMsg = NULL;
-    MY_DRIVER_PROCESS_CREATE_MESSAGE_REPLY reply = {0};
+    MY_DRIVER_MESSAGE_REPLY reply = {0};
 
     if (!(gDrv.Options & OPT_FLAG_MONITOR_CREATE_PROCESS))
     {

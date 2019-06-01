@@ -483,10 +483,97 @@ CommUninitializeFilterCommunicationPort() // uses implicit global parameter
 #define MSG_DELAY_ONE_MILLISECOND               (MSG_DELAY_ONE_MICROSECOND*1000)
 #define MSG_DELAY_ONE_SECOND                    (MSG_DELAY_ONE_MILLISECOND*1000)
 
+typedef struct _MY_WORK_ITEM
+{
+    PVOID InputBuffer;
+    ULONG InputBufferSize;
+    PVOID OutputBuffer;
+    PULONG OutputBufferSize;
+} MY_WORK_ITEM, *PMY_WORK_ITEM;
+
 _IRQL_requires_max_(APC_LEVEL)
-NTSTATUS 
+static PVOID
+_CommDefaultThreadPoolWorker(
+    _In_ PVOID Arg
+)
+{
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    LARGE_INTEGER timeout;
+    MY_WORK_ITEM *pArg = (MY_WORK_ITEM *)Arg;
+    
+    timeout.QuadPart = 60 * MSG_DELAY_ONE_SECOND; // 60 seconds
+
+
+    FltAcquirePushLockShared(&gDrv.Communication.Lock);
+    __try
+    {
+        LogTrace("Sending message to app. Input: 0x%p size %u Output: 0x%p size 0x%u",
+            pArg->InputBuffer, pArg->InputBufferSize, pArg->OutputBuffer, pArg->OutputBufferSize ? *pArg->OutputBufferSize : 0);
+
+        status = FltSendMessage(gDrv.FilterHandle,
+            &gDrv.Communication.ClientPort,
+            pArg->InputBuffer,
+            pArg->InputBufferSize,
+            pArg->OutputBuffer,
+            pArg->OutputBufferSize,
+            &timeout);
+        if (!NT_SUCCESS(status))
+        {
+            LogError("FltSendMessage failed with status 0x%X", status);
+            // not success
+            __leave;
+        }
+
+        if (status == STATUS_TIMEOUT)
+        {
+            status = STATUS_MESSAGE_LOST;
+            __leave;
+        }
+
+        status = STATUS_SUCCESS;
+    }
+    __finally
+    {
+        FltReleasePushLock(&gDrv.Communication.Lock);
+    }
+
+    ExFreePoolWithTag(pArg->InputBuffer, 'GSM+');
+
+    ExFreePoolWithTag(pArg, 'Work');
+
+    if (!NT_SUCCESS(status))
+    {
+        LogError("_CommDefaultThreadPoolWorker: 0x%08x", status);
+    }
+
+    return NULL;
+}
+
+
+_IRQL_requires_max_(APC_LEVEL)
+NTSTATUS
+CommSendMessageOnThreadPool(
+    _In_ PVOID InputBuffer,
+    _In_ ULONG InputBufferSize,
+    _Out_ PVOID OutputBuffer,
+    _Inout_ PULONG OutputBufferSize
+)
+{
+    PMY_WORK_ITEM pItem = ExAllocatePoolWithTag(NonPagedPool, sizeof(MY_WORK_ITEM), 'Work');
+
+    pItem->InputBuffer = InputBuffer;
+    pItem->InputBufferSize = InputBufferSize;
+    pItem->OutputBuffer = OutputBuffer;
+    pItem->OutputBufferSize = OutputBufferSize;
+
+    return KThrpCreateAndEnqueueWorkItem(gDrv.ThreadPool, _CommDefaultThreadPoolWorker, NULL, pItem);
+}
+
+
+_IRQL_requires_max_(APC_LEVEL)
+NTSTATUS
 CommSendMessage(
-    _In_ PVOID InputBuffer, 
+    _In_ PVOID InputBuffer,
     _In_ ULONG InputBufferSize,
     _Out_ PVOID OutputBuffer,
     _Inout_ PULONG OutputBufferSize
@@ -495,6 +582,9 @@ CommSendMessage(
     NTSTATUS status = STATUS_UNSUCCESSFUL;
     LARGE_INTEGER timeout;
     timeout.QuadPart = 60 * MSG_DELAY_ONE_SECOND; // 60 seconds
+
+
+    // merge ffff greu, fac un threadpool sa trimit...
 
     FltAcquirePushLockShared(&gDrv.Communication.Lock);
     __try

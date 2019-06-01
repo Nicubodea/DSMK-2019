@@ -24,7 +24,7 @@ main(
         return status;
     }
 	
-	status = CmdStartMonitoring(0x1);
+	status = CmdStartMonitoring(0xFFFFFFFF);
 	printf("Start monitoring returned status = 0x%X\n", status);
 
 	printf("Waiting for key...\n");

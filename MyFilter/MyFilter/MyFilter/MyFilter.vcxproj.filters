@@ -56,6 +56,9 @@
     <ClInclude Include="ThreadFIlter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="threadpool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MyFilter.c">
@@ -77,6 +80,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ModuleFilter.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="threadpool.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

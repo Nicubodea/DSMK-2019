@@ -15,12 +15,7 @@ ProcFltSendMessageProcessCreate(
 )
 {
     PMY_DRIVER_MSG_PROCESS_NOTIFICATION pMsg = NULL;
-    MY_DRIVER_MESSAGE_REPLY reply = {0};
-
-    if (!(gDrv.Options & OPT_FLAG_MONITOR_CREATE_PROCESS))
-    {
-        return;
-    }
+    LARGE_INTEGER time = { 0 };
 
     ULONG msgSize = sizeof(MY_DRIVER_MSG_PROCESS_NOTIFICATION);
     if (CreateInfo->ImageFileName)
@@ -34,8 +29,14 @@ ProcFltSendMessageProcessCreate(
         return;
     }
 
+    KeQuerySystemTimePrecise(&time);
+
+    pMsg->Header.TimeStamp = time.QuadPart;
+    pMsg->Header.Result = STATUS_SUCCESS;
     pMsg->Header.MessageCode = msgProcessCreate;
+
     pMsg->ProcessId = HandleToULong(ProcessId);
+
     if (CreateInfo->ImageFileName)
     {
         pMsg->ImagePathLength = CreateInfo->ImageFileName->Length;
@@ -46,14 +47,13 @@ ProcFltSendMessageProcessCreate(
         pMsg->ImagePathLength = 0;
     }
 
-    ULONG replySize = sizeof(reply);
-    NTSTATUS status = CommSendMessage(pMsg, msgSize, &reply, &replySize);
+    NTSTATUS status = CommSendMessageOnThreadPool(pMsg, msgSize, NULL, NULL);
     if (!NT_SUCCESS(status))
     {
         LogError("CommSendMessage failed with status = 0x%X", status);
     }
 
-    ExFreePoolWithTag(pMsg, 'GSM+');
+    //ExFreePoolWithTag(pMsg, 'GSM+');
 }
 
 static VOID
@@ -61,19 +61,26 @@ ProcFltSendMessageProcessTerminate(
     _In_ HANDLE ProcessId
 )
 {
-    MY_DRIVER_PROCESS_TERMINATE_MSG msg;
+    PMY_DRIVER_PROCESS_TERMINATE_MSG pMsg = NULL;
+    LARGE_INTEGER time = { 0 };
 
-    if (!(gDrv.Options & OPT_FLAG_MONITOR_TERMINATE_PROCESS))
+    ULONG msgSize = sizeof(MY_DRIVER_PROCESS_TERMINATE_MSG);
+
+    pMsg = ExAllocatePoolWithTag(PagedPool, msgSize, 'GSM+');
+    if (!pMsg)
     {
         return;
     }
 
-    msg.Header.MessageCode = msgProcessTerminate;
+    KeQuerySystemTimePrecise(&time);
 
-    msg.ProcessId = HandleToULong(ProcessId);
+    pMsg->Header.TimeStamp = time.QuadPart;
+    pMsg->Header.Result = STATUS_SUCCESS;
+    pMsg->Header.MessageCode = msgProcessTerminate;
 
-    ULONG replySize = 0;
-    NTSTATUS status = CommSendMessage(&msg, sizeof(msg), NULL, &replySize);
+    pMsg->ProcessId = HandleToULong(ProcessId);
+
+    NTSTATUS status = CommSendMessageOnThreadPool(pMsg, sizeof(*pMsg), NULL, NULL);
     if (!NT_SUCCESS(status))
     {
         LogError("CommSendMessage failed with status = 0x%X", status);

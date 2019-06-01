@@ -1,9 +1,75 @@
 #include "RegisterFilter.h"
 #include "Trace.h"
 #include "RegisterFilter.tmh"
+#include "CommShared.h"
 
 LARGE_INTEGER gCookie;
 UNICODE_STRING gAltitude;
+
+void
+RegFltSendMessageRegistry(
+    _In_ PUNICODE_STRING Name,
+    _In_opt_ PUNICODE_STRING NewName,
+    _In_ MY_DRIVER_MSG_KEY_TYPE Type
+)
+{
+    PMY_DRIVER_MSG_REGISTRY_NOTIFICATION pMsg = NULL;
+    LARGE_INTEGER time = { 0 };
+    ULONG lastData = 0;
+
+    ULONG msgSize = sizeof(MY_DRIVER_MSG_REGISTRY_NOTIFICATION);
+    if (Name)
+    {
+        msgSize += Name->Length;
+    }
+
+    if (NewName)
+    {
+        msgSize += NewName->Length;
+    }
+
+    pMsg = ExAllocatePoolWithTag(PagedPool, msgSize, 'GSM+');
+    if (!pMsg)
+    {
+        return;
+    }
+
+    KeQuerySystemTimePrecise(&time);
+
+    pMsg->Header.TimeStamp = time.QuadPart;
+    pMsg->Header.Result = STATUS_SUCCESS;
+    pMsg->Header.MessageCode = msgRegistryOp;
+
+    pMsg->Type = Type;
+
+    if (Name)
+    {
+        pMsg->NameLen = Name->Length;
+        RtlCopyMemory(&pMsg->Data[0], Name->Buffer, Name->Length);
+        lastData = pMsg->NameLen;
+    }
+    else
+    {
+        pMsg->NameLen = 0;
+    }
+
+    if (NewName)
+    {
+        pMsg->NewNameLen = NewName->Length;
+        RtlCopyMemory(&pMsg->Data[lastData], NewName->Buffer, NewName->Length);
+    }
+    else
+    {
+        pMsg->NewNameLen = 0;
+    }
+    NTSTATUS status = CommSendMessageOnThreadPool(pMsg, msgSize, NULL, NULL);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("CommSendMessage failed with status = 0x%X", status);
+    }
+
+    ExFreePoolWithTag(pMsg, 'GSM+');
+}
 
 static NTSTATUS
 RegExCallbackFunction(
@@ -40,7 +106,8 @@ RegExCallbackFunction(
             goto _exit;
         }
 
-        LogInfo("[REGISTRY] [CREATE] Key: %wZ\n", objName);
+        RegFltSendMessageRegistry(objName, NULL, regKeyCreate);
+        //LogInfo("[REGISTRY] [CREATE] Key: %wZ\n", objName);
     }
     if (notifyClass == RegNtPreSetValueKey)
     {
@@ -60,7 +127,8 @@ RegExCallbackFunction(
             goto _exit;
         }
 
-        LogInfo("[REGISTRY] [SET-VALUE] Key: %wZ, Value: %wZ", objName, pInfo->ValueName);
+        RegFltSendMessageRegistry(objName, pInfo->ValueName, regValueSet);
+        //LogInfo("[REGISTRY] [SET-VALUE] Key: %wZ, Value: %wZ", objName, pInfo->ValueName);
     }
 
     if (notifyClass == RegNtDeleteKey)
@@ -81,7 +149,8 @@ RegExCallbackFunction(
             goto _exit;
         }
 
-        LogInfo("[REGISTRY] [DELETE-KEY] Key: %wZ", objName);
+        RegFltSendMessageRegistry(objName, NULL, regKeyDelete);
+        //LogInfo("[REGISTRY] [DELETE-KEY] Key: %wZ", objName);
     }
 
     if (notifyClass == RegNtDeleteValueKey)
@@ -102,7 +171,8 @@ RegExCallbackFunction(
             goto _exit;
         }
         
-        LogInfo("[REGISTRY] [DELETE-VALUE] Key: %wZ, Value: %wZ", objName, pInfo->ValueName);
+        RegFltSendMessageRegistry(objName, pInfo->ValueName, regValueDelete);
+        //LogInfo("[REGISTRY] [DELETE-VALUE] Key: %wZ, Value: %wZ", objName, pInfo->ValueName);
     }
 
     if (notifyClass == RegNtPreLoadKey)
@@ -130,7 +200,8 @@ RegExCallbackFunction(
             goto _exit;
         }
 
-        LogInfo("[REGISTRY] [RENAME] Old name: %wZ, new name: %wZ\n", objName, pInfo->NewName);
+        RegFltSendMessageRegistry(objName, pInfo->NewName, regKeyRename);
+        //LogInfo("[REGISTRY] [RENAME] Old name: %wZ, new name: %wZ\n", objName, pInfo->NewName);
     }
 
 _exit:

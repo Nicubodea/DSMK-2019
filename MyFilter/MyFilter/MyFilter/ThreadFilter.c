@@ -1,7 +1,70 @@
 #include "ThreadFilter.h"
 #include "Trace.h"
 #include "ThreadFilter.tmh"
+#include "CommShared.h"
 
+static void
+ThrFltSendMessageThrCreate(
+    HANDLE ProcessId,
+    HANDLE ThreadId
+)
+{
+    PMY_DRIVER_MSG_THREAD_CREATE_NOTIFICATION msg = NULL;
+    LARGE_INTEGER time = { 0 };
+
+    msg = ExAllocatePoolWithTag(PagedPool, sizeof(*msg), 'GSM+');
+    if (!msg)
+    {
+        return;
+    }
+
+    KeQuerySystemTimePrecise(&time);
+
+    msg->Header.TimeStamp = time.QuadPart;
+    msg->Header.Result = STATUS_SUCCESS;
+    msg->Header.MessageCode = msgThreadCreate;
+
+    msg->ProcessId = HandleToULong(ProcessId);
+    msg->ThreadId = HandleToULong(ThreadId);
+
+    NTSTATUS status = CommSendMessageOnThreadPool(msg, sizeof(*msg), NULL, NULL);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("CommSendMessage failed with status = 0x%X", status);
+    }
+}
+
+
+static void
+ThrFltSendMessageThrTerminate(
+    HANDLE ProcessId,
+    HANDLE ThreadId
+)
+{
+    PMY_DRIVER_MSG_THREAD_CREATE_NOTIFICATION msg = NULL;
+    LARGE_INTEGER time = { 0 };
+
+    msg = ExAllocatePoolWithTag(PagedPool, sizeof(*msg), 'GSM+');
+    if (!msg)
+    {
+        return;
+    }
+
+    KeQuerySystemTimePrecise(&time);
+
+    msg->Header.TimeStamp = time.QuadPart;
+    msg->Header.Result = STATUS_SUCCESS;
+    msg->Header.MessageCode = msgThreadTerminate;
+
+    msg->ProcessId = HandleToULong(ProcessId);
+    msg->ThreadId = HandleToULong(ThreadId);
+
+    NTSTATUS status = CommSendMessageOnThreadPool(msg, sizeof(*msg), NULL, NULL);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("CommSendMessage failed with status = 0x%X", status);
+    }
+}
 
 static void
 ThrThreadCreateNotifyRoutine(
@@ -12,11 +75,13 @@ ThrThreadCreateNotifyRoutine(
 {
     if (Create)
     {
-        LogInfo("[THREAD] [CREATE] Pid %d Tid: %d", (ULONG)(SIZE_T)ProcessId, (ULONG)(SIZE_T)ThreadId);
+        //LogInfo("[THREAD] [CREATE] Pid %d Tid: %d", (ULONG)(SIZE_T)ProcessId, (ULONG)(SIZE_T)ThreadId);
+        ThrFltSendMessageThrCreate(ProcessId, ThreadId);
     }
     else
     {
-        LogInfo("[THREAD] [TERMINATE] Pid %d Tid: %d", (ULONG)(SIZE_T)ProcessId, (ULONG)(SIZE_T)ThreadId);
+        //LogInfo("[THREAD] [TERMINATE] Pid %d Tid: %d", (ULONG)(SIZE_T)ProcessId, (ULONG)(SIZE_T)ThreadId);
+        ThrFltSendMessageThrTerminate(ProcessId, ThreadId);
     }
 }
 

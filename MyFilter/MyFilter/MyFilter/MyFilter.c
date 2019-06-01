@@ -252,6 +252,13 @@ DriverEntry (
     //  Register with FltMgr to tell it our callback routines
     //
 
+    status = KThrpInitializeThreadPool(10, kthreadPoolSyncTypeSpinLock, &gDrv.ThreadPool);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("KThrpInitializeThreadPool: 0x%08x\n", status);
+        return status;
+    }
+
     status = FltRegisterFilter( DriverObject,
                                 &FilterRegistration,
                                 &gDrv.FilterHandle );
@@ -291,10 +298,18 @@ MyFilterUnload (
 {
     UNREFERENCED_PARAMETER( Flags );
 
+    NTSTATUS status;
+
     PAGED_CODE();
 
     LogInfo("MyFilter!MyFilterUnload: Entered\n");
     MyFltUpdateOptions(0);
+    status = KThrpWaitAndStopThreadPool(gDrv.ThreadPool);
+    if (!NT_SUCCESS(status))
+    {
+        LogCritical("KThrpWaitAndStopThreadPool: 0x%08x\n", status);
+    }
+
     CommUninitializeFilterCommunicationPort();
     FltUnregisterFilter( gDrv.FilterHandle );
 
@@ -311,7 +326,6 @@ MyFilterSendFileMessage(
 )
 {
     MY_DRIVER_MSG_FILE_NOTIFICATION *pMsg = NULL;
-    MY_DRIVER_MESSAGE_REPLY reply = { 0 };
     LARGE_INTEGER time;
 
     if (!(gDrv.Options & OPT_FLAG_MONITOR_FILE))
@@ -353,14 +367,13 @@ MyFilterSendFileMessage(
         pMsg->NameLen = 0;
     }
 
-    ULONG replySize = sizeof(reply);
-    NTSTATUS status = CommSendMessage(pMsg, msgSize, &reply, &replySize);
+    NTSTATUS status = CommSendMessageOnThreadPool(pMsg, msgSize, NULL, NULL);
     if (!NT_SUCCESS(status))
     {
         LogError("CommSendMessage failed with status = 0x%X", status);
     }
 
-    ExFreePoolWithTag(pMsg, 'GSM+');
+    //ExFreePoolWithTag(pMsg, 'GSM+');
 }
 
 
@@ -382,7 +395,12 @@ MyFilterPreOperation (
     UNREFERENCED_PARAMETER( FltObjects );
     UNREFERENCED_PARAMETER( CompletionContext );
 
-    status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_FILESYSTEM_ONLY, &fltInfo);
+    if (!(gDrv.Options & OPT_FLAG_MONITOR_FILE))
+    {
+        return FLT_PREOP_SUCCESS_WITH_CALLBACK;
+    }
+
+    status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED, &fltInfo);
     if (!NT_SUCCESS(status))
     {
         LogError("[ERROR] FltGetFileNameInformation: 0x%08x", status);
@@ -433,7 +451,7 @@ MyFilterPostOperation (
     UNREFERENCED_PARAMETER( CompletionContext );
     UNREFERENCED_PARAMETER( Flags );
 
-    LogInfo("MyFilter!MyFilterPostOperation: Entered\n");
+    //LogInfo("MyFilter!MyFilterPostOperation: Entered\n");
     return FLT_POSTOP_FINISHED_PROCESSING;
 }
 

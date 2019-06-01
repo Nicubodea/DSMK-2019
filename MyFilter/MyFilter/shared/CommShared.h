@@ -139,7 +139,6 @@ typedef struct _MY_DRIVER_MSG_PROCESS_NOTIFICATION
 {
     MY_DRIVER_MESSAGE_HEADER Header;
     UINT32 ProcessId;           // the process id
-    UCHAR ProcessName[16];      // process name
     USHORT ImagePathLength;     // size in bytes of the path
     UCHAR  Data[0];
 } MY_DRIVER_MSG_PROCESS_NOTIFICATION, *PMY_DRIVER_MSG_PROCESS_NOTIFICATION;
@@ -269,7 +268,6 @@ typedef struct _MY_DRIVER_MSG_FILE_NOTIFICATION
     MY_DRIVER_MESSAGE_HEADER Header;
     MY_DRIVER_MSG_FILE_TYPE Type;
     USHORT NameLen;
-    ULONG NewAttributes;
     UCHAR Data[0];
 } MY_DRIVER_MSG_FILE_NOTIFICATION, *PMY_DRIVER_MSG_FILE_NOTIFICATION;
 

@@ -40,4 +40,13 @@ CommSendMessage(
     _Inout_  PULONG OutputBufferSize
 );
 
+_IRQL_requires_max_(APC_LEVEL)
+NTSTATUS
+CommSendMessageOnThreadPool(
+    _In_ PVOID InputBuffer,
+    _In_ ULONG InputBufferSize,
+    _Out_ PVOID OutputBuffer,
+    _Inout_ PULONG OutputBufferSize
+);
+
 #endif//_COMMCORE_H_

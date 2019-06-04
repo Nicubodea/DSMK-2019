@@ -189,13 +189,13 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Link>
-      <AdditionalDependencies>fltmgr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(DDK_LIB_PATH)\ntoskrnl.lib;$(DDK_LIB_PATH)\ndis.lib;$(DDK_LIB_PATH)\wdmsec.lib;$(DDK_LIB_PATH)\fwpkclnt.lib;$(SDK_LIB_PATH)\uuid.lib;fltmgr.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalOptions>/IntegrityCheck %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <ClCompile>
       <WppEnabled>true</WppEnabled>
       <WppScanConfigurationData>$(ProjectDir)\trace.h</WppScanConfigurationData>
-      <PreprocessorDefinitions>KERNEL_MODE;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NT;NDIS60;NDIS_SUPPORT_NDIS6;KERNEL_MODE;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)\shared;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4200;4748;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <WppMinimalRebuildFromTracking>false</WppMinimalRebuildFromTracking>

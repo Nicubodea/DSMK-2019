@@ -9,6 +9,7 @@
 #include "Options.h"
 #include "CommShared.h"
 
+
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
 /*************************************************************************
     Globals
@@ -227,6 +228,271 @@ MyFilterInstanceTeardownComplete (
     LogInfo("MyFilter!MyFilterInstanceTeardownComplete: Entered\n");
 }
 
+UUID gCalloutUuid = {
+    0x5f61fd37,
+    0xd074,
+    0x49b4,
+    0x8e, 0x28,
+    0x6b, 0xc8,
+    0xb5, 0x97,
+    0x5e, 0x8d
+};
+
+UUID gLayerUuid = {
+    0x7a969d74,
+    0x0794,
+    0x4a7f,
+    0x97, 0xb1,
+    0xea, 0xce,
+    0x3b, 0xef,
+    0x85, 0x84,
+};
+
+void GetNetwork5TupleIndexesForLayer(
+    _In_ UINT16 layerId,
+    _Out_ UINT* appId,
+    _Out_ UINT* localAddressIndex,
+    _Out_ UINT* remoteAddressIndex,
+    _Out_ UINT* localPortIndex,
+    _Out_ UINT* remotePortIndex,
+    _Out_ UINT* protocolIndex,
+    _Out_ UINT* icmpIndex
+
+)
+{
+    switch (layerId)
+    {
+    case FWPS_LAYER_ALE_AUTH_CONNECT_V4:
+        *appId = FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_APP_ID;
+        *localAddressIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS;
+        *remoteAddressIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS;
+        *localPortIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_PORT;
+        *remotePortIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT;
+        *protocolIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL;
+        *icmpIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V4_ICMP_TYPE;
+        break;
+    case FWPS_LAYER_ALE_AUTH_CONNECT_V6:
+        *appId = FWPS_FIELD_ALE_AUTH_CONNECT_V6_ALE_APP_ID;
+        *localAddressIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_LOCAL_ADDRESS;
+        *remoteAddressIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_ADDRESS;
+        *localPortIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_LOCAL_PORT;
+        *remotePortIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_PORT;
+        *protocolIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_PROTOCOL;
+        *icmpIndex = FWPS_FIELD_ALE_AUTH_CONNECT_V6_ICMP_TYPE;
+        break;
+    case FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4:
+        *appId = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_ALE_APP_ID;
+        *localAddressIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_ADDRESS;
+        *remoteAddressIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_REMOTE_ADDRESS;
+        *localPortIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_PORT;
+        *remotePortIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_REMOTE_PORT;
+        *protocolIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_PROTOCOL;
+        *icmpIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_ICMP_TYPE;
+        break;
+    case FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V6:
+        *appId = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_ALE_APP_ID;
+        *localAddressIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_IP_LOCAL_ADDRESS;
+        *remoteAddressIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_IP_REMOTE_ADDRESS;
+        *localPortIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_IP_LOCAL_PORT;
+        *remotePortIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_IP_REMOTE_PORT;
+        *protocolIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_IP_PROTOCOL;
+        *icmpIndex = FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V6_ICMP_TYPE;
+        break;
+    default:
+        *appId = 0;
+        *localAddressIndex = 0;
+        *remoteAddressIndex = 0;
+        *localPortIndex = 0;
+        *remotePortIndex = 0;
+        *protocolIndex = 0;
+        *icmpIndex = 0;
+        NT_ASSERT(0);
+    }
+}
+
+
+
+VOID MyDriverClassify(
+    _In_ const FWPS_INCOMING_VALUES* inFixedValues,
+    _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
+    _Inout_opt_ void* layerData,
+    _In_opt_ const void* classifyContext,
+    _In_ const FWPS_FILTER* filter,
+    _In_ UINT64 flowContext,
+    _Inout_ FWPS_CLASSIFY_OUT* classifyOut
+)
+{
+    UNREFERENCED_PARAMETER(inMetaValues);
+    UNREFERENCED_PARAMETER(layerData);
+    UNREFERENCED_PARAMETER(classifyContext);
+    UNREFERENCED_PARAMETER(filter);
+    UNREFERENCED_PARAMETER(flowContext);
+    UNREFERENCED_PARAMETER(classifyOut);
+    ///...
+    LogInfo("MyDriverClassify called:");
+
+    UINT appid, local, remote, localport, remoteport, protocol, icmp;
+
+    GetNetwork5TupleIndexesForLayer(inFixedValues->layerId, &appid, &local, &remote, &localport, &remoteport, &protocol, &icmp);
+
+    if (FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4 == inFixedValues->layerId || FWPS_LAYER_ALE_AUTH_CONNECT_V4 == inFixedValues->layerId)
+    {
+        LogInfo("Incoming value: appid: %s, local: 0x%08x, remote: 0x%08x, localport: %d, remoteport: %d",
+            (char*)inFixedValues->incomingValue[appid].value.byteBlob->data,
+            inFixedValues->incomingValue[local].value.int32,
+            inFixedValues->incomingValue[remote].value.int32,
+            inFixedValues->incomingValue[localport].value.uint16,
+            inFixedValues->incomingValue[remoteport].value.uint16
+        );
+    }
+    else
+    {
+        LogInfo("Incoming value: appid: %s, local: %s, remote: %s, localport: %d, remoteport: %d",
+            (char*)inFixedValues->incomingValue[appid].value.byteBlob->data,
+            (char*)inFixedValues->incomingValue[local].value.byteArray16->byteArray16,
+            (char*)inFixedValues->incomingValue[remote].value.byteArray16->byteArray16,
+            inFixedValues->incomingValue[localport].value.uint16,
+            inFixedValues->incomingValue[remoteport].value.uint16
+        );
+    }
+}
+
+
+NTSTATUS MyDriverNotify(
+    FWPS_CALLOUT_NOTIFY_TYPE notifyType,
+    const GUID *filterKey,
+    FWPS_FILTER *filter
+)
+{
+    UNREFERENCED_PARAMETER(notifyType);
+    UNREFERENCED_PARAMETER(filterKey);
+    UNREFERENCED_PARAMETER(filter);
+
+    return STATUS_SUCCESS;
+}
+
+
+NTSTATUS
+MyFltInitializeCallouts(
+
+)
+{
+    NTSTATUS status;
+
+    FWPS_CALLOUT sCallout = { 0 };
+    FWPM_CALLOUT mCallout = { 0 };
+    FWPM_FILTER filter = { 0 };
+
+    FWPM_SUBLAYER sublayer;
+
+    status = FwpmEngineOpen(
+        NULL,
+        RPC_C_AUTHN_WINNT,
+        NULL,
+        NULL,
+        &gDrv.EngineHandle
+    );
+
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmEngineOpen0 failed: 0x%08x\n", status);
+        return status;
+    }
+
+    sublayer.subLayerKey = gLayerUuid;
+    sublayer.displayData.name = L"My Filter for sisc sublayer";
+    sublayer.displayData.description = L"it is just a sublayer";
+
+    sublayer.flags = 0;
+    sublayer.weight = FWP_EMPTY;
+
+    status = FwpmSubLayerAdd(gDrv.EngineHandle, &sublayer, NULL);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmSubLayerAdd failed: 0x%08x\n", status);
+        return status;
+    }
+    
+    sCallout.calloutKey = gCalloutUuid;
+    sCallout.classifyFn = MyDriverClassify;
+    sCallout.notifyFn = MyDriverNotify;
+
+    status = FwpsCalloutRegister(gDrv.DeviceObject, &sCallout, &gDrv.SCalloutId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpsCalloutRegister failed: 0x%08x\n", status);
+        return status;
+    }
+
+    mCallout.calloutKey = gLayerUuid;
+    mCallout.displayData.name = L"My Filter for sisc callout";
+    mCallout.displayData.description = L"it is just a callout";
+    mCallout.applicableLayer = gCalloutUuid;
+
+    status = FwpmCalloutAdd(gDrv.EngineHandle, &mCallout, NULL, &gDrv.MCalloutId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmCalloutAdd failed: 0x%08x\n", status);
+        return status;
+    }
+
+    filter.layerKey = FWPM_LAYER_ALE_FLOW_ESTABLISHED_V4;
+    filter.subLayerKey = gLayerUuid;
+    filter.action.type = FWP_ACTION_CALLOUT_INSPECTION;
+    filter.action.calloutKey = gCalloutUuid;
+
+    filter.displayData.name = L"My filter for sisc filter";
+    filter.displayData.description = L"it is just a filter";
+
+    status = FwpmFilterAdd(gDrv.EngineHandle, &filter, NULL, &gDrv.FilterId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmFilterAdd failed: 0x%08x\n", status);
+        return status;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+
+NTSTATUS
+MyFltUninitializeCallouts(
+
+)
+{
+    NTSTATUS status;
+    
+    status = FwpmFilterDeleteById(gDrv.EngineHandle, gDrv.FilterId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmFilterDeleteById failed: 0x%08x\n", status);
+        return status;
+    }
+        
+    status = FwpmCalloutDeleteById(gDrv.EngineHandle, gDrv.MCalloutId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmCalloutDeleteById failed: 0x%08x\n", status);
+        return status;
+    }
+    
+    status = FwpsCalloutUnregisterById(gDrv.SCalloutId);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpsCalloutUnregisterById failed: 0x%08x\n", status);
+        return status;
+    }
+
+    status = FwpmEngineClose(gDrv.EngineHandle);
+    if (!NT_SUCCESS(status))
+    {
+        LogError("FwpmEngineClose failed: 0x%08x\n", status);
+        return status;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 
 /*************************************************************************
     MiniFilter initialization and unload routines.
@@ -286,6 +552,25 @@ DriverEntry (
             CommUninitializeFilterCommunicationPort();
             FltUnregisterFilter( gDrv.FilterHandle );
         }
+    }
+
+    status = IoCreateDevice(DriverObject, 0,
+        NULL,
+        FILE_DEVICE_UNKNOWN,
+        FILE_DEVICE_SECURE_OPEN,
+        FALSE,
+        &gDrv.DeviceObject
+    );
+
+    if (!NT_SUCCESS(status))
+    {
+        LogError("IoCreateDevice failed: 0x%08x", status);
+    }
+
+    status = MyFltInitializeCallouts();
+    if (!NT_SUCCESS(status))
+    {
+        LogError("MyFltInitializeCallouts: 0x%08x", status);
     }
 
     return status;
